@@ -1,0 +1,54 @@
+       /*  
+        *  Cray Inc. Decompilation
+        *  Notice - This output is provided for information only.
+        *  
+        *  Cray Inc. reserves the right to change the format of this
+        *  information at any time and does not guarantee the
+        *  readability or accuracy of this information.
+        *  
+        *  This information may not be compilable and corresponds to
+        *  the internal representation of the program during the
+        *  optimization phase of the compilation process.
+        *  
+        *  Source                :  ComputeSPMV_ref.cpp
+        *  File                  :  /cray/css/users/smehta/hpcg/src/ComputeSPMV_ref.opt
+        *  Network               :  Aries interconnect
+        *  Target                :  arm-sve[width=1024] :: sve, fma
+        */  
+   47. 
+   47. int
+   47. ComputeSPMV_ref( A, x, y )
+   47. {
+   49.    if ( x[0].localLength < A[0].localNumberOfColumns ) {
+   49.       __assert_fail( &@cfe_static_2413[0], &@cfe_static_2414[0], 49, &@cfe_static_2412[0] );
+   49.    }
+   50.    if ( y[0].localLength < A[0].localNumberOfRows ) {
+   50.       __assert_fail( &@cfe_static_2415[0], &@cfe_static_2414[0], 50, &@cfe_static_2412[0] );
+   50.    }
+   53.    ExchangeHalo( A, x );
+   55.    $xv_S5 = x[0].values;
+   56.    $yv_S7 = y[0].values;
+   57.    $nrow_S0 = A[0].localNumberOfRows;
+   61.    if ( 0 < A[0].localNumberOfRows ) {
+   61.       $I_i_2 = 0;
+   61.       do {
+   62.          sum = 0.0;
+   63.          $cur_vals_S6 = A[0].matrixValues[$I_i_2];
+   64.          $cur_inds_S4 = A[0].mtxIndL[$I_i_2];
+   65.          $cur_nnz_S2 = (int)( A[0].nonzerosInRow[$I_i_2] );
+   68.          if ( 0 < $cur_nnz_S2 ) {
+   68.             $I_j_0 = 0;
+   68. #pragma ivdep
+   68. #pragma unroll 3
+   68.             do {
+   69.                sum += $cur_vals_S6[$I_j_0] * $xv_S5[$cur_inds_S4[$I_j_0]];
+   68.                $I_j_0++;
+   70.             } while ( $I_j_0 < $cur_nnz_S2 );
+   70.          }
+   71.          $yv_S7[$I_i_2] = sum;
+   61.          $I_i_2++;
+   72.       } while ( $I_i_2 < $nrow_S0 );
+   72.    }
+   74.    return 0;
+   74. }
+   74. 

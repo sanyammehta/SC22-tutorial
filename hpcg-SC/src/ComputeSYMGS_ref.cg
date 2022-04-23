@@ -1,0 +1,170 @@
+       /*  
+        *  Cray Inc. Decompilation
+        *  Notice - This output is provided for information only.
+        *  
+        *  Cray Inc. reserves the right to change the format of this
+        *  information at any time and does not guarantee the
+        *  readability or accuracy of this information.
+        *  
+        *  This information may not be compilable and corresponds to
+        *  the internal representation of the program during the
+        *  optimization phase of the compilation process.
+        *  
+        *  Source                :  src/ComputeSYMGS_ref.cpp
+        *  File                  :  /cray/css/users/smehta/hpcg/src/ComputeSYMGS_ref.cg
+        *  Network               :  Aries interconnect
+        *  Target                :  arm-sve[width=512] :: sve, fma
+        */  
+   54. 
+   54. int
+   54. ComputeSYMGS_ref( A, r, x )
+   54. {
+   56.    $GVN_x_10 = x;
+   56.    $GVN_x_8 = (long) $GVN_x_10;
+   56.    $GVN_A_11 = A;
+   56.    $GVN_A_9 = (long) $GVN_A_11;
+   56.    if ( 9[$GVN_A_9,0] - 0[$GVN_x_8,0] != 0 ) {
+   56.       __assert_fail( &96[&@cfe_static_2417].B, &136[&@cfe_static_2417].B, 56, @cfe_static_2417 );
+   56.    }
+   59.    ExchangeHalo( $GVN_A_11, $GVN_x_10 );
+   62.    $nrow_S0 = 8[$GVN_A_9,0];
+   63.    $matrixDiagonal_S2 = 10[$GVN_A_9,0].L;
+   64.    $rv_S3 = 1[(long) r,0].L;
+   65.    $xv_S8 = 1[$GVN_x_8,0].L;
+   67.    if ( 0 < $nrow_S0 ) {
+   67.       $i_S20 = 0;
+   67.       $T_$I_i_4_H0 = $nrow_S0;
+   68.       $LIS_A_1 = $GVN_A_9;
+   78.       $GVN_0_13[0:8:1,a32].L = _bcst( 0.0, 8 );
+   78.       $LIS_0_7[0:8:1,a32].L = $GVN_0_13[0:8:1,a32].L;
+   67.       do {
+   68.          $currentValues_S9 = 0[(long)( 9[$LIS_A_1,0].L ),$i_S20].L;
+   69.          $currentColIndices_S6 = 0[(long)( 8[$LIS_A_1,0].L ),$i_S20].L;
+   70.          $currentNumberOfNonzeros_S4 = 0[$i_S20 + (long)( 6[$LIS_A_1,0].L )].B;
+   71.          $currentDiagonal_S10 = 0[(long)( 0[(long) $matrixDiagonal_S2,$i_S20].L ),0].L;
+   72.          $sum_S31 = 0[(long) $rv_S3,$i_S20].L;
+   75.          if ( 0 < $currentNumberOfNonzeros_S4 ) {
+   75.             $j_S32 = 0;
+   75.             $T_$I_j_0_H1 = $currentNumberOfNonzeros_S4;
+   75.             if ( $T_$I_j_0_H1 >= 8 ) /*  99.50%  */{
+   75.                $TC_10 = -8 & $T_$I_j_0_H1;
+   78.                $VR_sum_14[0:8:1,a32].L = $LIS_0_7[0:8:1,a32].L;
+   75.                $LC_S21 = -$TC_10;
+   76.                $SR_S22 = (long) $currentColIndices_S6;
+   78.                $SR_S24 = (long) $currentValues_S9;
+   75.                if ( $LC_S21 < -47 ) {
+   75.                   $Induc01_J0 = -47 + $TC_10;
+   75.                   do {
+   76.                      $curCol_S23[0:8:1,a32] = 0[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S23[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $curCol_S25[0:8:1,a32] = 8[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 8[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S25[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $curCol_S26[0:8:1,a32] = 16[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 16[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S26[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $curCol_S27[0:8:1,a32] = 24[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 24[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S27[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $curCol_S28[0:8:1,a32] = 32[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 32[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S28[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $curCol_S29[0:8:1,a32] = 40[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 40[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S29[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $SR_S22 += 192;
+   78.                      $SR_S24 += 384;
+   75.                      $LC_S21 += 48;
+   75.                      $Induc01_J0 -= 48;
+   79.                   } while ( $Induc01_J0 > 0 );
+   79.                }
+   75.                if ( $LC_S21 < 0 ) {
+   75.                   do {
+   76.                      $curCol_S30[0:8:1,a32] = 0[$SR_S22:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SR_S24:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S30[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $SR_S22 += 32;
+   78.                      $SR_S24 += 64;
+   75.                      $LC_S21 += 8;
+   79.                   } while ( $LC_S21 < 0 );
+   79.                }
+   78.                $sum_S31 += _rpls( $VR_sum_14[0:8:1,a32].L, 8, 1 );
+   75.                $j_S32 = $TC_10;
+   75.             }
+   75.             if ( $T_$I_j_0_H1 > $j_S32 ) /*  99.50%  */{
+   75.                do {
+   76.                   $curCol_S7 = 0[(long) $currentColIndices_S6,$j_S32];
+   78.                   $sum_S31 = _fnmadd( 0[(long) $currentValues_S9,$j_S32].L, 0[(long) $xv_S8,$curCol_S7].L, $sum_S31 );
+   75.                   $j_S32++;
+   79.                } while ( $j_S32 < $T_$I_j_0_H1 );
+   79.             }
+   79.          }
+   82.          0[(long) $xv_S8,$i_S20].L = ( _fmadd( 0[(long) $xv_S8,$i_S20].L, $currentDiagonal_S10, $sum_S31 ) ) / $currentDiagonal_S10;
+   67.          $i_S20++;
+   84.       } while ( $i_S20 < $T_$I_i_4_H0 );
+   88.       $i_S33 = 0;
+   88.       $T_$I_i_6_H2 = $nrow_S0;
+   89.       $LIS_A_0 = $GVN_A_9;
+  101.       $GVN_8_12 = $nrow_S0 << 3;
+  101.       $LIS_2 = $GVN_8_12 + (long) $xv_S8;
+   93.       $LIS_3 = $GVN_8_12 + (long) $rv_S3;
+   92.       $LIS_4 = $GVN_8_12 + (long) $matrixDiagonal_S2;
+   89.       $LIS_8_5 = $GVN_8_12;
+   97.       $LIS_0_6[0:8:1,a32].L = $GVN_0_13[0:8:1,a32].L;
+   88.       do {
+   89.          $currentValues_S17 = -1[$LIS_8_5 + (long)( 9[$LIS_A_0,0].L ),-$i_S33].L;
+   90.          $currentColIndices_S15 = -1[$LIS_8_5 + (long)( 8[$LIS_A_0,0].L ),-$i_S33].L;
+   91.          $currentNumberOfNonzeros_S13 = -1[$nrow_S0 - $i_S33 + (long)( 6[$LIS_A_0,0].L )].B;
+   92.          $currentDiagonal_S18 = 0[(long)( -1[$LIS_4,-$i_S33].L ),0].L;
+   93.          $sum_S44 = -1[$LIS_3,-$i_S33].L;
+   95.          if ( 0 < $currentNumberOfNonzeros_S13 ) {
+   95.             $j_S45 = 0;
+   95.             $T_$I_j_2_H3 = $currentNumberOfNonzeros_S13;
+   95.             if ( $T_$I_j_2_H3 >= 8 ) /*  99.50%  */{
+   95.                $TC_15 = -8 & $T_$I_j_2_H3;
+   97.                $VR_sum_19[0:8:1,a32].L = $LIS_0_6[0:8:1,a32].L;
+   95.                $LC_S34 = -$TC_15;
+   96.                $SR_S35 = (long) $currentColIndices_S15;
+   97.                $SR_S37 = (long) $currentValues_S17;
+   95.                if ( $LC_S34 < -47 ) {
+   95.                   $Induc01_J0 = -47 + $TC_15;
+   95.                   do {
+   96.                      $curCol_S36[0:8:1,a32] = 0[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S36[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $curCol_S38[0:8:1,a32] = 8[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 8[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S38[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $curCol_S39[0:8:1,a32] = 16[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 16[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S39[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $curCol_S40[0:8:1,a32] = 24[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 24[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S40[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $curCol_S41[0:8:1,a32] = 32[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 32[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S41[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $curCol_S42[0:8:1,a32] = 40[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 40[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S42[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $SR_S35 += 192;
+   97.                      $SR_S37 += 384;
+   95.                      $LC_S34 += 48;
+   95.                      $Induc01_J0 -= 48;
+   98.                   } while ( $Induc01_J0 > 0 );
+   98.                }
+   95.                if ( $LC_S34 < 0 ) {
+   95.                   do {
+   96.                      $curCol_S43[0:8:1,a32] = 0[$SR_S35:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SR_S37:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S43[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $SR_S35 += 32;
+   97.                      $SR_S37 += 64;
+   95.                      $LC_S34 += 8;
+   98.                   } while ( $LC_S34 < 0 );
+   98.                }
+   97.                $sum_S44 += _rpls( $VR_sum_19[0:8:1,a32].L, 8, 1 );
+   95.                $j_S45 = $TC_15;
+   95.             }
+   95.             if ( $T_$I_j_2_H3 > $j_S45 ) /*  99.50%  */{
+   95.                do {
+   96.                   $curCol_S16 = 0[(long) $currentColIndices_S15,$j_S45];
+   97.                   $sum_S44 = _fnmadd( 0[(long) $currentValues_S17,$j_S45].L, 0[(long) $xv_S8,$curCol_S16].L, $sum_S44 );
+   95.                   $j_S45++;
+   98.                } while ( $j_S45 < $T_$I_j_2_H3 );
+   98.             }
+   98.          }
+  101.          -1[$LIS_2,-$i_S33].L = ( _fmadd( -1[$LIS_2,-$i_S33].L, $currentDiagonal_S18, $sum_S44 ) ) / $currentDiagonal_S18;
+   88.          $i_S33++;
+  102.       } while ( $i_S33 < $T_$I_i_6_H2 );
+  102.    }
+  105.    return 0;
+  105. }
+  105. 

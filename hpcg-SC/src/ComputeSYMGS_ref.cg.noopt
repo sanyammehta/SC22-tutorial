@@ -1,0 +1,200 @@
+       /*  
+        *  Cray Inc. Decompilation
+        *  Notice - This output is provided for information only.
+        *  
+        *  Cray Inc. reserves the right to change the format of this
+        *  information at any time and does not guarantee the
+        *  readability or accuracy of this information.
+        *  
+        *  This information may not be compilable and corresponds to
+        *  the internal representation of the program during the
+        *  optimization phase of the compilation process.
+        *  
+        *  Source                :  src/ComputeSYMGS_ref.cpp
+        *  File                  :  /cray/css/users/smehta/hpcg/src/ComputeSYMGS_ref.cg
+        *  Network               :  Aries interconnect
+        *  Target                :  X86 :: skylake, avx512f, fma
+        */  
+   54. 
+   54. int
+   54. ComputeSYMGS_ref( A, r, x )
+   54. {
+   56.    $GVN_x_10 = x;
+   56.    $GVN_x_8 = (long) $GVN_x_10;
+   56.    $GVN_A_11 = A;
+   56.    $GVN_A_9 = (long) $GVN_A_11;
+   56.    if ( 9[$GVN_A_9,0] - 0[$GVN_x_8,0] != 0 ) {
+   56.       __assert_fail( &@cfe_static_2204[0].B, &@cfe_static_2205[0].B, 56, &@cfe_static_2203[0].B );
+   56.    }
+   59.    ExchangeHalo( $GVN_A_11, $GVN_x_10 );
+   62.    $nrow_S0 = 8[$GVN_A_9,0];
+   63.    $matrixDiagonal_S2 = 10[$GVN_A_9,0].L;
+   64.    $rv_S3 = 1[(long) r,0].L;
+   65.    $xv_S8 = 1[$GVN_x_8,0].L;
+   67.    if ( 0 < $nrow_S0 ) {
+   67.       $i_S20 = 0;
+   67.       $T_$I_i_4_H0 = $nrow_S0;
+   68.       $LIS_A_1 = $GVN_A_9;
+   78.       $GVN_0_13[0:8:1,a32].L = _bcst( 0.0, 8 );
+   78.       $LIS_0_7[0:8:1,a32].L = $GVN_0_13[0:8:1,a32].L;
+   67.       do {
+   68.          $currentValues_S9 = 0[(long)( 9[$LIS_A_1,0].L ),$i_S20].L;
+   69.          $currentColIndices_S6 = 0[(long)( 8[$LIS_A_1,0].L ),$i_S20].L;
+   70.          $currentNumberOfNonzeros_S4 = 0[$i_S20 + (long)( 6[$LIS_A_1,0].L )].B;
+   71.          $currentDiagonal_S10 = 0[(long)( 0[(long) $matrixDiagonal_S2,$i_S20].L ),0].L;
+   72.          $sum_S54 = 0[(long) $rv_S3,$i_S20].L;
+   75.          if ( 0 < $currentNumberOfNonzeros_S4 ) {
+   75.             $j_S55 = 0;
+   75.             $T_$I_j_0_H1 = $currentNumberOfNonzeros_S4;
+   75.             if ( $T_$I_j_0_H1 >= 8 ) /*  99.50%  */{
+   75.                $TC_10 = -8 & $T_$I_j_0_H1;
+   78.                $VR_sum_14[0:8:1,a32].L = $LIS_0_7[0:8:1,a32].L;
+   75.                $LC_S23 = -$TC_10;
+   76.                $SR_S21 = (long) $currentColIndices_S6;
+   78.                $SR_S22 = (long) $currentValues_S9;
+   75.                $SI_NEXT_S24 = 32 + $SR_S21;
+   75.                $SI_NEXT_S28 = 64 + $SR_S22;
+   75.                $VPO_currentColIndices_S25[0:8:1,a32] = 0[$SR_S21:8:1,a4];
+   75.                if ( $LC_S23 < -47 ) {
+   75.                   $Induc01_J0 = -47 + $TC_10;
+   75.                   do {
+   76.                      $VP_currentColIndices_26[0:8:1,a32] = 0[$SI_NEXT_S24:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SR_S22:8:1,a8].L, 0[(long) $xv_S8:8:$VPO_currentColIndices_S25[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   75.                      $SI_NEXT_S30 = 32 + $SI_NEXT_S24;
+   75.                      $SI_NEXT_S33 = 64 + $SI_NEXT_S28;
+   76.                      $VP_currentColIndices_28[0:8:1,a32] = 0[$SI_NEXT_S30:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S28:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_26[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   75.                      $SI_NEXT_S35 = 32 + $SI_NEXT_S30;
+   75.                      $SI_NEXT_S38 = 64 + $SI_NEXT_S33;
+   76.                      $VP_currentColIndices_30[0:8:1,a32] = 0[$SI_NEXT_S35:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S33:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_28[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   75.                      $SI_NEXT_S40 = 32 + $SI_NEXT_S35;
+   75.                      $SI_NEXT_S43 = 64 + $SI_NEXT_S38;
+   76.                      $VP_currentColIndices_32[0:8:1,a32] = 0[$SI_NEXT_S40:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S38:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_30[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   75.                      $SI_NEXT_S45 = 32 + $SI_NEXT_S40;
+   75.                      $SI_NEXT_S48 = 64 + $SI_NEXT_S43;
+   76.                      $VP_currentColIndices_34[0:8:1,a32] = 0[$SI_NEXT_S45:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S43:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_32[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   75.                      $SI_NEXT_S50 = 32 + $SI_NEXT_S45;
+   75.                      $SI_NEXT_S52 = 64 + $SI_NEXT_S48;
+   76.                      $VPO_currentColIndices_S25[0:8:1,a32] = 0[$SI_NEXT_S50:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S48:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_34[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $SR_S21 = $SI_NEXT_S50;
+   75.                      $SI_NEXT_S24 = 32 + $SI_NEXT_S50;
+   78.                      $SR_S22 = $SI_NEXT_S52;
+   75.                      $SI_NEXT_S28 = 64 + $SI_NEXT_S52;
+   75.                      $LC_S23 += 48;
+   75.                      $Induc01_J0 -= 48;
+   79.                   } while ( $Induc01_J0 > 0 );
+   79.                }
+   75.                if ( $LC_S23 < 0 ) {
+   75.                   do {
+   76.                      $curCol_S53[0:8:1,a32] = 0[$SR_S21:8:1,a4];
+   78.                      $VR_sum_14[0:8:1,a32].L = _fnmadd( 0[$SR_S22:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S53[0:8:1,a32],a8].L, $VR_sum_14[0:8:1,a32].L );
+   76.                      $SR_S21 += 32;
+   78.                      $SR_S22 += 64;
+   75.                      $LC_S23 += 8;
+   79.                   } while ( $LC_S23 < 0 );
+   79.                }
+   78.                $sum_S54 += _rpls( $VR_sum_14[0:8:1,a32].L, 8, 1 );
+   75.                $j_S55 = $TC_10;
+   75.             }
+   75.             if ( $T_$I_j_0_H1 > $j_S55 ) /*  99.50%  */{
+   75.                do {
+   76.                   $curCol_S7 = 0[(long) $currentColIndices_S6,$j_S55];
+   78.                   $sum_S54 = _fnmadd( 0[(long) $currentValues_S9,$j_S55].L, 0[(long) $xv_S8,$curCol_S7].L, $sum_S54 );
+   75.                   $j_S55++;
+   79.                } while ( $j_S55 < $T_$I_j_0_H1 );
+   79.             }
+   79.          }
+   82.          0[(long) $xv_S8,$i_S20].L = ( _fmadd( 0[(long) $xv_S8,$i_S20].L, $currentDiagonal_S10, $sum_S54 ) ) / $currentDiagonal_S10;
+   67.          $i_S20++;
+   84.       } while ( $i_S20 < $T_$I_i_4_H0 );
+   88.       $i_S56 = 0;
+   88.       $T_$I_i_6_H2 = $nrow_S0;
+   89.       $LIS_A_0 = $GVN_A_9;
+  101.       $GVN_8_12 = $nrow_S0 << 3;
+  101.       $LIS_2 = $GVN_8_12 + (long) $xv_S8;
+   93.       $LIS_3 = $GVN_8_12 + (long) $rv_S3;
+   92.       $LIS_4 = $GVN_8_12 + (long) $matrixDiagonal_S2;
+   89.       $LIS_8_5 = $GVN_8_12;
+   97.       $LIS_0_6[0:8:1,a32].L = $GVN_0_13[0:8:1,a32].L;
+   88.       do {
+   89.          $currentValues_S17 = -1[$LIS_8_5 + (long)( 9[$LIS_A_0,0].L ),-$i_S56].L;
+   90.          $currentColIndices_S15 = -1[$LIS_8_5 + (long)( 8[$LIS_A_0,0].L ),-$i_S56].L;
+   91.          $currentNumberOfNonzeros_S13 = -1[$nrow_S0 - $i_S56 + (long)( 6[$LIS_A_0,0].L )].B;
+   92.          $currentDiagonal_S18 = 0[(long)( -1[$LIS_4,-$i_S56].L ),0].L;
+   93.          $sum_S90 = -1[$LIS_3,-$i_S56].L;
+   95.          if ( 0 < $currentNumberOfNonzeros_S13 ) {
+   95.             $j_S91 = 0;
+   95.             $T_$I_j_2_H3 = $currentNumberOfNonzeros_S13;
+   95.             if ( $T_$I_j_2_H3 >= 8 ) /*  99.50%  */{
+   95.                $TC_15 = -8 & $T_$I_j_2_H3;
+   97.                $VR_sum_19[0:8:1,a32].L = $LIS_0_6[0:8:1,a32].L;
+   95.                $LC_S59 = -$TC_15;
+   96.                $SR_S57 = (long) $currentColIndices_S15;
+   97.                $SR_S58 = (long) $currentValues_S17;
+   95.                $SI_NEXT_S60 = 32 + $SR_S57;
+   95.                $SI_NEXT_S64 = 64 + $SR_S58;
+   95.                $VPO_currentColIndices_S61[0:8:1,a32] = 0[$SR_S57:8:1,a4];
+   95.                if ( $LC_S59 < -47 ) {
+   95.                   $Induc01_J0 = -47 + $TC_15;
+   95.                   do {
+   96.                      $VP_currentColIndices_42[0:8:1,a32] = 0[$SI_NEXT_S60:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SR_S58:8:1,a8].L, 0[(long) $xv_S8:8:$VPO_currentColIndices_S61[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   95.                      $SI_NEXT_S66 = 32 + $SI_NEXT_S60;
+   95.                      $SI_NEXT_S69 = 64 + $SI_NEXT_S64;
+   96.                      $VP_currentColIndices_44[0:8:1,a32] = 0[$SI_NEXT_S66:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S64:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_42[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   95.                      $SI_NEXT_S71 = 32 + $SI_NEXT_S66;
+   95.                      $SI_NEXT_S74 = 64 + $SI_NEXT_S69;
+   96.                      $VP_currentColIndices_46[0:8:1,a32] = 0[$SI_NEXT_S71:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S69:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_44[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   95.                      $SI_NEXT_S76 = 32 + $SI_NEXT_S71;
+   95.                      $SI_NEXT_S79 = 64 + $SI_NEXT_S74;
+   96.                      $VP_currentColIndices_48[0:8:1,a32] = 0[$SI_NEXT_S76:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S74:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_46[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   95.                      $SI_NEXT_S81 = 32 + $SI_NEXT_S76;
+   95.                      $SI_NEXT_S84 = 64 + $SI_NEXT_S79;
+   96.                      $VP_currentColIndices_50[0:8:1,a32] = 0[$SI_NEXT_S81:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S79:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_48[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   95.                      $SI_NEXT_S86 = 32 + $SI_NEXT_S81;
+   95.                      $SI_NEXT_S88 = 64 + $SI_NEXT_S84;
+   96.                      $VPO_currentColIndices_S61[0:8:1,a32] = 0[$SI_NEXT_S86:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SI_NEXT_S84:8:1,a8].L, 0[(long) $xv_S8:8:$VP_currentColIndices_50[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $SR_S57 = $SI_NEXT_S86;
+   95.                      $SI_NEXT_S60 = 32 + $SI_NEXT_S86;
+   97.                      $SR_S58 = $SI_NEXT_S88;
+   95.                      $SI_NEXT_S64 = 64 + $SI_NEXT_S88;
+   95.                      $LC_S59 += 48;
+   95.                      $Induc01_J0 -= 48;
+   98.                   } while ( $Induc01_J0 > 0 );
+   98.                }
+   95.                if ( $LC_S59 < 0 ) {
+   95.                   do {
+   96.                      $curCol_S89[0:8:1,a32] = 0[$SR_S57:8:1,a4];
+   97.                      $VR_sum_19[0:8:1,a32].L = _fnmadd( 0[$SR_S58:8:1,a8].L, 0[(long) $xv_S8:8:$curCol_S89[0:8:1,a32],a8].L, $VR_sum_19[0:8:1,a32].L );
+   96.                      $SR_S57 += 32;
+   97.                      $SR_S58 += 64;
+   95.                      $LC_S59 += 8;
+   98.                   } while ( $LC_S59 < 0 );
+   98.                }
+   97.                $sum_S90 += _rpls( $VR_sum_19[0:8:1,a32].L, 8, 1 );
+   95.                $j_S91 = $TC_15;
+   95.             }
+   95.             if ( $T_$I_j_2_H3 > $j_S91 ) /*  99.50%  */{
+   95.                do {
+   96.                   $curCol_S16 = 0[(long) $currentColIndices_S15,$j_S91];
+   97.                   $sum_S90 = _fnmadd( 0[(long) $currentValues_S17,$j_S91].L, 0[(long) $xv_S8,$curCol_S16].L, $sum_S90 );
+   95.                   $j_S91++;
+   98.                } while ( $j_S91 < $T_$I_j_2_H3 );
+   98.             }
+   98.          }
+  101.          -1[$LIS_2,-$i_S56].L = ( _fmadd( -1[$LIS_2,-$i_S56].L, $currentDiagonal_S18, $sum_S90 ) ) / $currentDiagonal_S18;
+   88.          $i_S56++;
+  102.       } while ( $i_S56 < $T_$I_i_6_H2 );
+  102.    }
+  105.    return 0;
+  105. }
+  105. 

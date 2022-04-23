@@ -1,0 +1,141 @@
+
+ComputeSPMV_ref.o:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000000000000 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_>:
+   0:	a9be53f5 	stp	x21, x20, [sp, #-32]!
+   4:	a9017bf3 	stp	x19, x30, [sp, #16]
+   8:	aa0103f4 	mov	x20, x1
+   c:	aa0003f3 	mov	x19, x0
+  10:	b9400288 	ldr	w8, [x20]
+  14:	b9402669 	ldr	w9, [x19, #36]
+  18:	6b09011f 	cmp	w8, w9
+  1c:	aa0203f5 	mov	x21, x2
+  20:	540000ea 	b.ge	3c <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x3c>  // b.tcont
+  24:	90000003 	adrp	x3, 0 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_>
+  28:	91000063 	add	x3, x3, #0x0
+  2c:	91016060 	add	x0, x3, #0x58
+  30:	91020061 	add	x1, x3, #0x80
+  34:	52800622 	mov	w2, #0x31                  	// #49
+  38:	94000000 	bl	0 <__assert_fail>
+  3c:	b94002a8 	ldr	w8, [x21]
+  40:	b9402269 	ldr	w9, [x19, #32]
+  44:	6b09011f 	cmp	w8, w9
+  48:	540000ea 	b.ge	64 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x64>  // b.tcont
+  4c:	90000003 	adrp	x3, 0 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_>
+  50:	91000063 	add	x3, x3, #0x0
+  54:	91026060 	add	x0, x3, #0x98
+  58:	91020061 	add	x1, x3, #0x80
+  5c:	52800642 	mov	w2, #0x32                  	// #50
+  60:	94000000 	bl	0 <__assert_fail>
+  64:	aa1303e0 	mov	x0, x19
+  68:	aa1403e1 	mov	x1, x20
+  6c:	94000000 	bl	0 <_Z12ExchangeHaloRK19SparseMatrix_STRUCTR13Vector_STRUCT>
+  70:	b9802268 	ldrsw	x8, [x19, #32]
+  74:	7100051f 	cmp	w8, #0x1
+  78:	54000beb 	b.lt	1f4 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1f4>  // b.tstop
+  7c:	aa1f03e9 	mov	x9, xzr
+  80:	f940068a 	ldr	x10, [x20, #8]
+  84:	f94006ab 	ldr	x11, [x21, #8]
+  88:	25f8c000 	mov	z0.d, #0
+  8c:	25d8e3e0 	ptrue	p0.d
+  90:	b27d03ec 	orr	x12, xzr, #0x8
+  94:	b27c03ed 	orr	x13, xzr, #0x10
+  98:	b27d07ee 	orr	x14, xzr, #0x18
+  9c:	b27b03ef 	orr	x15, xzr, #0x20
+  a0:	d2800510 	mov	x16, #0x28                  	// #40
+  a4:	1400000e 	b	dc <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0xdc>
+  a8:	aa1203e3 	mov	x3, x18
+  ac:	aa0003e4 	mov	x4, x0
+  b0:	04603001 	mov	z1.d, z0.d
+  b4:	b6f80762 	tbz	x2, #63, 1a0 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1a0>
+  b8:	a480a082 	ld1sw	{z2.d}, p0/z, [x4]
+  bc:	c5e2c142 	ld1d	{z2.d}, p0/z, [x10, z2.d, lsl #3]
+  c0:	a5e0a063 	ld1d	{z3.d}, p0/z, [x3]
+  c4:	91002042 	add	x2, x2, #0x8
+  c8:	91010063 	add	x3, x3, #0x40
+  cc:	65e20061 	fmla	z1.d, p0/m, z3.d, z2.d
+  d0:	91008084 	add	x4, x4, #0x20
+  d4:	b7ffff22 	tbnz	x2, #63, b8 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0xb8>
+  d8:	14000032 	b	1a0 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1a0>
+  dc:	f9401a71 	ldr	x17, [x19, #48]
+  e0:	38a96a31 	ldrsb	x17, [x17, x9]
+  e4:	f100063f 	cmp	x17, #0x1
+  e8:	5400064b 	b.lt	1b0 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1b0>  // b.tstop
+  ec:	a9444a60 	ldp	x0, x18, [x19, #64]
+  f0:	d37df121 	lsl	x1, x9, #3
+  f4:	f8616a52 	ldr	x18, [x18, x1]
+  f8:	f8616800 	ldr	x0, [x0, x1]
+  fc:	7100223f 	cmp	w17, #0x8
+ 100:	540005cb 	b.lt	1b8 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1b8>  // b.tstop
+ 104:	927df221 	and	x1, x17, #0xfffffffffffffff8
+ 108:	f100c03f 	cmp	x1, #0x30
+ 10c:	cb0103e2 	neg	x2, x1
+ 110:	54fffccb 	b.lt	a8 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0xa8>  // b.tstop
+ 114:	d100bc25 	sub	x5, x1, #0x2f
+ 118:	aa1203e3 	mov	x3, x18
+ 11c:	aa0003e4 	mov	x4, x0
+ 120:	04603001 	mov	z1.d, z0.d
+ 124:	a480a082 	ld1sw	{z2.d}, p0/z, [x4]
+ 128:	c5e2c142 	ld1d	{z2.d}, p0/z, [x10, z2.d, lsl #3]
+ 12c:	a5e0a063 	ld1d	{z3.d}, p0/z, [x3]
+ 130:	a48c4084 	ld1sw	{z4.d}, p0/z, [x4, x12, lsl #2]
+ 134:	a5ec4065 	ld1d	{z5.d}, p0/z, [x3, x12, lsl #3]
+ 138:	c5e4c144 	ld1d	{z4.d}, p0/z, [x10, z4.d, lsl #3]
+ 13c:	a48d4086 	ld1sw	{z6.d}, p0/z, [x4, x13, lsl #2]
+ 140:	a5ed4067 	ld1d	{z7.d}, p0/z, [x3, x13, lsl #3]
+ 144:	c5e6c146 	ld1d	{z6.d}, p0/z, [x10, z6.d, lsl #3]
+ 148:	a48e4090 	ld1sw	{z16.d}, p0/z, [x4, x14, lsl #2]
+ 14c:	a5ee4071 	ld1d	{z17.d}, p0/z, [x3, x14, lsl #3]
+ 150:	c5f0c150 	ld1d	{z16.d}, p0/z, [x10, z16.d, lsl #3]
+ 154:	a48f4092 	ld1sw	{z18.d}, p0/z, [x4, x15, lsl #2]
+ 158:	65e20061 	fmla	z1.d, p0/m, z3.d, z2.d
+ 15c:	65e400a1 	fmla	z1.d, p0/m, z5.d, z4.d
+ 160:	a5ef4062 	ld1d	{z2.d}, p0/z, [x3, x15, lsl #3]
+ 164:	c5f2c143 	ld1d	{z3.d}, p0/z, [x10, z18.d, lsl #3]
+ 168:	65e600e1 	fmla	z1.d, p0/m, z7.d, z6.d
+ 16c:	65f00221 	fmla	z1.d, p0/m, z17.d, z16.d
+ 170:	a4904084 	ld1sw	{z4.d}, p0/z, [x4, x16, lsl #2]
+ 174:	65e30041 	fmla	z1.d, p0/m, z2.d, z3.d
+ 178:	d100c0a5 	sub	x5, x5, #0x30
+ 17c:	a5f04062 	ld1d	{z2.d}, p0/z, [x3, x16, lsl #3]
+ 180:	c5e4c143 	ld1d	{z3.d}, p0/z, [x10, z4.d, lsl #3]
+ 184:	f10000bf 	cmp	x5, #0x0
+ 188:	91060063 	add	x3, x3, #0x180
+ 18c:	91030084 	add	x4, x4, #0xc0
+ 190:	65e30041 	fmla	z1.d, p0/m, z2.d, z3.d
+ 194:	9100c042 	add	x2, x2, #0x30
+ 198:	54fffc6c 	b.gt	124 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x124>
+ 19c:	b7fff8e2 	tbnz	x2, #63, b8 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0xb8>
+ 1a0:	65c02021 	faddv	d1, p0, z1.d
+ 1a4:	eb11003f 	cmp	x1, x17
+ 1a8:	5400010b 	b.lt	1c8 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1c8>  // b.tstop
+ 1ac:	1400000e 	b	1e4 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1e4>
+ 1b0:	9e6703e1 	fmov	d1, xzr
+ 1b4:	1400000c 	b	1e4 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1e4>
+ 1b8:	aa1f03e1 	mov	x1, xzr
+ 1bc:	9e6703e1 	fmov	d1, xzr
+ 1c0:	eb11003f 	cmp	x1, x17
+ 1c4:	5400010a 	b.ge	1e4 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1e4>  // b.tcont
+ 1c8:	b8a17802 	ldrsw	x2, [x0, x1, lsl #2]
+ 1cc:	fc617a42 	ldr	d2, [x18, x1, lsl #3]
+ 1d0:	fc627943 	ldr	d3, [x10, x2, lsl #3]
+ 1d4:	91000421 	add	x1, x1, #0x1
+ 1d8:	eb11003f 	cmp	x1, x17
+ 1dc:	1f430441 	fmadd	d1, d2, d3, d1
+ 1e0:	54ffff4b 	b.lt	1c8 <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0x1c8>  // b.tstop
+ 1e4:	fc297961 	str	d1, [x11, x9, lsl #3]
+ 1e8:	91000529 	add	x9, x9, #0x1
+ 1ec:	eb08013f 	cmp	x9, x8
+ 1f0:	54fff76b 	b.lt	dc <_Z15ComputeSPMV_refRK19SparseMatrix_STRUCTR13Vector_STRUCTS3_+0xdc>  // b.tstop
+ 1f4:	2a1f03e0 	mov	w0, wzr
+ 1f8:	a9417bf3 	ldp	x19, x30, [sp, #16]
+ 1fc:	a8c253f5 	ldp	x21, x20, [sp], #32
+ 200:	d65f03c0 	ret
+
+0000000000000204 <SVEChecker>:
+ 204:	90000000 	adrp	x0, 0 <ERROR_same_fixed_width_required_for_all_objects_vl_8>
+ 208:	91000000 	add	x0, x0, #0x0
+ 20c:	d65f03c0 	ret

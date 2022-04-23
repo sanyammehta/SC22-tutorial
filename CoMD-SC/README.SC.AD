@@ -1,0 +1,23 @@
+Our changes were made to eam_kernel.c, and they are contained in the file eam_kernel-vector.c
+
+Build instructions:
+
+The Makefile that we used is copied in this directory - it invokes the Cray compiler and the relevant flags (no special flags were used)
+So, to build, just type: 
+'make' or 'make -j'
+
+The binary 'CoMD_openmp' is generated in the same directory. To generate the instrumented executable to use with CrayPat, type:
+pat_build ./CoMD_openmp
+
+This generates CoMD_openmp+pat executable.
+
+Run instructions:
+
+For SKL:
+aprun -j1 -n24 --p-state=2100000 ./CoMD_openmp+pat -e -i 2 -j 3 -k 4 -x 24 -y 24 -z 24 -N 100 -T 4000
+aprun -j2 -n48 --p-state=2100000 ./CoMD_openmp+pat -e -i 4 -j 3 -k 4 -x 24 -y 24 -z 24 -N 100 -T 4000
+
+For KNL (numactl --membind=1 forces allocation in MCDRAM when flat mode enabled):
+aprun -j1 -n64 --p-state=1401000 numactl --membind=1 ./CoMD_openmp+pat -e -i 4 -j 4 -k 4 -x 24 -y 24 -z 24 -N 100 -T 4000
+aprun -j2 -n128 --p-state=1401000 numactl --membind=1 ./CoMD_openmp+pat -e -i 4 -j 4 -k 8 -x 24 -y 24 -z 24 -N 100 -T 4000
+aprun -j4 -n256 --p-state=1401000 numactl --membind=1 ./CoMD_openmp+pat -e -i 4 -j 8 -k 8 -x 24 -y 24 -z 24 -N 100 -T 4000

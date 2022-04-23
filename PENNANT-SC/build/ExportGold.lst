@@ -1,0 +1,2168 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/ExportGold.o src/ExportGold.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc
+Date     : 06/04/2020  18:09:50
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.    D-------------<> /*
+    2.                      * ExportGold.cc
+    3.                      *
+    4.                      *  Created on: Mar 1, 2012
+    5.                      *      Author: cferenba
+    6.                      *
+    7.                      * Copyright (c) 2012, Triad National Security, LLC.
+    8.                      * All rights reserved.
+    9.                      * Use of this source code is governed by a BSD-style open-source
+   10.                      * license; see top-level LICENSE file for full license text.
+   11.                      */
+   12.                     
+   13.                     #include "ExportGold.hh"
+   14.                     
+   15.                     #include <iostream>
+   16.                     #include <fstream>
+   17.                     #include <iomanip>
+   18.                     #include <cstdlib>
+   19.                     #include <numeric>
+   20.                     
+   21.                     #include "Parallel.hh"
+   22.                     #include "Vec2.hh"
+   23.                     #include "Mesh.hh"
+   24.                     
+   25.                     using namespace std;
+   26.                     
+   27.                     
+   28.    Ip               ExportGold::ExportGold(Mesh* m) : mesh(m) {}
+   29.                     
+   30.    Ip               ExportGold::~ExportGold() {}
+   31.                     
+   32.                     
+   33.                     void ExportGold::write(
+   34.                             const string& basename,
+   35.                             const int cycle,
+   36.                             const double time,
+   37.                             const double* zr,
+   38.                             const double* ze,
+   39.                             const double* zp) {
+   40.                     
+   41.    Ip                   writeCaseFile(basename);
+   42.                     
+   43.  +                      sortZones();
+   44.  +                      writeGeoFile(basename, cycle, time);
+   45.                     
+   46.  +                      writeVarFile(basename, "zr", zr);
+   47.  +                      writeVarFile(basename, "ze", ze);
+   48.  +                      writeVarFile(basename, "zp", zp);
+   49.                     
+   50.                     }
+   51.                     
+   52.                     
+   53.                     void ExportGold::writeCaseFile(
+   54.                             const string& basename) {
+   55.                     
+   56.                         if (Parallel::mype > 0) return;
+   57.                     
+   58.                         // open file
+   59.    Ip                   const string filename = basename + ".case";
+   60.  + D Ip  I-------<>     ofstream ofs(filename.c_str());
+   61.  +                      if (!ofs.good()) {
+   62.  +                          cerr << "Cannot open file " << filename << " for writing"
+   63.                                  << endl;
+   64.  +                          exit(1);
+   65.                         }
+   66.                     
+   67.                         // write case info
+   68.  +                      ofs << "#" << endl;
+   69.  +                      ofs << "# Created by PENNANT" << endl;
+   70.  +                      ofs << "#" << endl;
+   71.                     
+   72.  +                      ofs << "FORMAT" << endl;
+   73.  +                      ofs << "type: ensight gold" << endl;
+   74.                     
+   75.  +                      ofs << "GEOMETRY" << endl;
+   76.  +                      ofs << "model: " << basename << ".geo" << endl;
+   77.                     
+   78.  +                      ofs << "VARIABLE" << endl;
+   79.  +                      ofs << "scalar per element: zr " << basename << ".zr" << endl;
+   80.  +                      ofs << "scalar per element: ze " << basename << ".ze" << endl;
+   81.  +                      ofs << "scalar per element: zp " << basename << ".zp" << endl;
+   82.                     
+   83.  +                      ofs.close();
+   84.                     
+   85.                     }
+   86.                     
+   87.                     
+   88.                     void ExportGold::writeGeoFile(
+   89.                             const string& basename,
+   90.                             const int cycle,
+   91.                             const double time) {
+   92.                         using Parallel::numpe;
+   93.                         using Parallel::mype;
+   94.                     
+   95.                         // open file
+   96.  +                      ofstream ofs;
+   97.                         if (mype == 0) {
+   98.  +                          const string filename = basename + ".geo";
+   99.  +                          ofs.open(filename.c_str());
+  100.  +                          if (!ofs.good()) {
+  101.  +                              cerr << "Cannot open file " << filename << " for writing"
+  102.                                      << endl;
+  103.  +                              exit(1);
+  104.                             }
+  105.  +                      }
+  106.                     
+  107.                         // write general header
+  108.                         if (mype == 0) {
+  109.  +                          ofs << scientific;
+  110.  + I                        ofs << "cycle = " << setw(8) << cycle << endl;
+  111.  + I                        ofs << setprecision(8);
+  112.  + I                        ofs << "t = " << setw(15) << time << endl;
+  113.  +                          ofs << "node id assign" << endl;
+  114.  +                          ofs << "element id given" << endl;
+  115.                     
+  116.                             // write header for the one "part" (entire mesh)
+  117.  +                          ofs << "part" << endl;
+  118.  + I                        ofs << setw(10) << 1 << endl;
+  119.  +                          ofs << "universe" << endl;
+  120.                         } // if mype == 0
+  121.                     
+  122.                         // gather node info to PE 0
+  123.                         const int nump = mesh->nump;
+  124.                         const double2* px = mesh->px;
+  125.                     
+  126.                         int gnump = nump;
+  127.  +                      Parallel::globalSum(gnump);
+  128.  + Ip  I                vector<int> penump(mype == 0 ? numpe : 0);
+  129.  + I                    Parallel::gather(nump, &penump[0]);
+  130.  + Ip  I                vector<int> peoffset(mype == 0 ? numpe + 1 : 1);
+  131.  + r4 I----------<>     partial_sum(penump.begin(), penump.end(), &peoffset[1]);
+  132.                         int offset;
+  133.  + I                    Parallel::scatter(&peoffset[0], offset);
+  134.  + Ip  I                vector<double2> gpx(mype == 0 ? gnump : 0);
+  135.  + I                    Parallel::gatherv(&px[0], nump, &gpx[0], &penump[0]);
+  136.                     
+  137.                         // write node info
+  138.                         if (mype == 0) {
+  139.  +                          ofs << "coordinates" << endl;
+  140.  + I                        ofs << setw(10) << gnump << endl;
+  141.  + I                        ofs << setprecision(5);
+  142.  + 1--------------<         for (int p = 0; p < gnump; ++p)
+  143.  + 1 I------------>             ofs << setw(12) << gpx[p].x << endl;
+  144.  + 1--------------<         for (int p = 0; p < gnump; ++p)
+  145.  + 1 I------------>             ofs << setw(12) << gpx[p].y << endl;
+  146.                             // Ensight expects z-coordinates, so write 0 for those
+  147.  + 1--------------<         for (int p = 0; p < gnump; ++p)
+  148.  + 1 I------------>             ofs << setw(12) << 0. << endl;
+  149.                         } // if mype
+  150.                     
+  151.                         const int* znump = mesh->znump;
+  152.                         const int* mapsp1 = mesh->mapsp1;
+  153.                     
+  154.    I                    const int ntris = tris.size();
+  155.    I                    const int nquads = quads.size();
+  156.    I                    const int nothers = others.size();
+  157.                     
+  158.                         if (mype == 0) {
+  159.  +                          pentris.resize(numpe);
+  160.  +                          penquads.resize(numpe);
+  161.  +                          penothers.resize(numpe);
+  162.                         }
+  163.  + I                    Parallel::gather(ntris, &pentris[0]);
+  164.  + I                    Parallel::gather(nquads, &penquads[0]);
+  165.  + I                    Parallel::gather(nothers, &penothers[0]);
+  166.                     
+  167.    Vr4 I---------<>     gntris = accumulate(pentris.begin(), pentris.end(), 0);
+  168.    Vr4 I---------<>     gnquads = accumulate(penquads.begin(), penquads.end(), 0);
+  169.    Vr4 I---------<>     gnothers = accumulate(penothers.begin(), penothers.end(), 0);
+  170.                     
+  171.  + Ip  I                vector<int> pesizes(mype == 0 ? numpe : 0);
+  172.                     
+  173.                         // gather triangle info to PE 0
+  174.  + Ip  I                vector<int> trip(3 * ntris);
+  175.  + Ip  I                vector<int> gtris(gntris), gtrip(3 * gntris);
+  176.  + I                    Parallel::gatherv(&tris[0], ntris, &gtris[0], &pentris[0]);
+  177.                         if (mype == 0) {
+  178.  + F--------------<         for (int pe = 0; pe < numpe; ++pe)
+  179.    F I------------>             pesizes[pe] = pentris[pe] * 3;
+  180.                         }
+  181.  + Fr4------------<     for (int t = 0; t < ntris; ++t) {
+  182.    Fr4 I                    int z = tris[t];
+  183.    Fr4 I                    int sbase = mapzs[z];
+  184.  + Fr4 wF---------<         for (int i = 0; i < 3; ++i) {
+  185.    Fr4 wF I                     trip[t * 3 + i] = mapsp1[sbase + i] + offset;
+  186.    Fr4 wF--------->         }
+  187.    Fr4------------>     }
+  188.  + I                    Parallel::gatherv(&trip[0], 3 * ntris, &gtrip[0], &pesizes[0]);
+  189.                     
+  190.                         // write triangles
+  191.                         if (mype == 0 && gntris > 0) {
+  192.  +                          ofs << "tria3" << endl;
+  193.  + I                        ofs << setw(10) << gntris << endl;
+  194.  + 1--------------<         for (int t = 0; t < gntris; ++t)
+  195.  + 1 I------------>             ofs << setw(10) << gtris[t] + 1 << endl;
+  196.  + 1--------------<         for (int t = 0; t < gntris; ++t) {
+  197.  + 1 2------------<             for (int i = 0; i < 3; ++i)
+  198.  + 1 2 I---------->                 ofs << setw(10) << gtrip[t * 3 + i] + 1;
+  199.  + 1                            ofs << endl;
+  200.    1-------------->         }
+  201.                         } // if mype == 0 ...
+  202.                     
+  203.                         // gather quad info to PE 0
+  204.  + Ip  I                vector<int> quadp(4 * nquads);
+  205.  + Ip  I                vector<int> gquads(gnquads), gquadp(4 * gnquads);
+  206.  + I                    Parallel::gatherv(&quads[0], nquads, &gquads[0], &penquads[0]);
+  207.                         if (mype == 0) {
+  208.  + F--------------<         for (int pe = 0; pe < numpe; ++pe)
+  209.    F I------------>             pesizes[pe] = penquads[pe] * 4;
+  210.                         }
+  211.  + Fr2------------<     for (int q = 0; q < nquads; ++q) {
+  212.    Fr2 I                    int z = quads[q];
+  213.    Fr2 I                    int sbase = mapzs[z];
+  214.  + Fr2 wF---------<         for (int i = 0; i < 4; ++i) {
+  215.    Fr2 wF I                     quadp[q * 4 + i] = mapsp1[sbase + i] + offset;
+  216.    Fr2 wF--------->         }
+  217.    Fr2------------>     }
+  218.  + I                    Parallel::gatherv(&quadp[0], 4 * nquads, &gquadp[0], &pesizes[0]);
+  219.                     
+  220.                         // write quads
+  221.                         if (mype == 0 && gnquads > 0) {
+  222.  +                          ofs << "quad4" << endl;
+  223.  + I                        ofs << setw(10) << gnquads << endl;
+  224.  + 1--------------<         for (int q = 0; q < gnquads; ++q)
+  225.  + 1 I------------>             ofs << setw(10) << gquads[q] + 1 << endl;
+  226.  + 1--------------<         for (int q = 0; q < gnquads; ++q) {
+  227.  + 1 2------------<             for (int i = 0; i < 4; ++i)
+  228.  + 1 2 I---------->                 ofs << setw(10) << gquadp[q * 4 + i] + 1;
+  229.  + 1                            ofs << endl;
+  230.    1-------------->         }
+  231.                         } // if mype == 0 ...
+  232.                     
+  233.                         // gather other info to PE 0
+  234.  + Ip  I                vector<int> othernump(nothers), otherp;
+  235.  + Ip  I                vector<int> gothers(gnothers), gothernump(gnothers);
+  236.  + I                    Parallel::gatherv(&others[0], nothers, &gothers[0], &penothers[0]);
+  237.  + 1--------------<     for (int n = 0; n < nothers; ++n) {
+  238.    1 I                      int z = others[n];
+  239.    1 I                      int sbase = mapzs[z];
+  240.    1 I                      othernump[n] = znump[z];
+  241.  + 1 2------------<         for (int i = 0; i < znump[z]; ++i) {
+  242.  + 1 2                          otherp.push_back(mapsp1[sbase + i] + offset);
+  243.    1 2------------>         }
+  244.    1-------------->     }
+  245.  + I                    Parallel::gatherv(&othernump[0], nothers, &gothernump[0], &penothers[0]);
+  246.    I                    int size = otherp.size();
+  247.  + I                    Parallel::gather(size, &pesizes[0]);
+  248.    Vr4 I---------<>     int gsize = accumulate(pesizes.begin(), pesizes.end(), 0);
+  249.  + Ip  I                vector<int> gotherp(gsize);
+  250.  + I                    Parallel::gatherv(&otherp[0], size, &gotherp[0], &pesizes[0]);
+  251.                     
+  252.                         // write others
+  253.                         if (mype == 0 && gnothers > 0) {
+  254.  +                          ofs << "nsided" << endl;
+  255.  + I                        ofs << setw(10) << gnothers << endl;
+  256.  + 1--------------<         for (int n = 0; n < gnothers; ++n)
+  257.  + 1 I------------>             ofs << setw(10) << gothers[n] + 1 << endl;
+  258.  + 1--------------<         for (int n = 0; n < gnothers; ++n)
+  259.  + 1 I------------>             ofs << setw(10) << gothernump[n] << endl;
+  260.                             int gp = 0;
+  261.  + 1--------------<         for (int n = 0; n < gnothers; ++n) {
+  262.  + 1 2 I----------<             for (int i = 0; i < gothernump[n]; ++i)
+  263.  + 1 2 I---------->                 ofs << setw(10) << gotherp[gp + i] + 1;
+  264.  + 1                            ofs << endl;
+  265.    1 I                          gp += gothernump[n];
+  266.    1-------------->         }
+  267.                         } // if mype == 0 ...
+  268.                     
+  269.  +                      if (mype == 0) ofs.close();
+  270.                     
+  271.                     }
+  272.                     
+  273.                     
+  274.                     void ExportGold::writeVarFile(
+  275.                             const string& basename,
+  276.                             const string& varname,
+  277.                             const double* var) {
+  278.                         using Parallel::mype;
+  279.                     
+  280.                         // open file
+  281.  +                      ofstream ofs;
+  282.                         if (mype == 0) {
+  283.  + Ip                       const string filename = basename + "." + varname;
+  284.  +                          ofs.open(filename.c_str());
+  285.  +                          if (!ofs.good()) {
+  286.  +                              cerr << "Cannot open file " << filename << " for writing"
+  287.                                      << endl;
+  288.  +                              exit(1);
+  289.                             }
+  290.  +                      } // if mype == 0
+  291.                     
+  292.                         // write header
+  293.                         if (mype == 0) {
+  294.  + I                        ofs << scientific << setprecision(5);
+  295.  +                          ofs << varname << endl;
+  296.  +                          ofs << "part" << endl;
+  297.  + I                        ofs << setw(10) << 1 << endl;
+  298.                         } // if mype == 0
+  299.                     
+  300.    I                    int ntris = tris.size();
+  301.    I                    int nquads = quads.size();
+  302.    I                    int nothers = others.size();
+  303.                     
+  304.                         // gather values on triangles to PE 0
+  305.  + Ip  I                vector<double> tvar(ntris), gtvar(gntris);
+  306.  + Fr4------------<     for (int t = 0; t < ntris; ++t) {
+  307.    Fr4 I                    tvar[t] = var[tris[t]];
+  308.    Fr4------------>     }
+  309.  + I                    Parallel::gatherv(&tvar[0], ntris, &gtvar[0], &pentris[0]);
+  310.                     
+  311.                         // write values on triangles
+  312.                         if (mype == 0 && gntris > 0) {
+  313.  +                          ofs << "tria3" << endl;
+  314.  + 1--------------<         for (int t = 0; t < gntris; ++t) {
+  315.  + 1 I                          ofs << setw(12) << gtvar[t] << endl;
+  316.    1-------------->         }
+  317.                         } // if mype == 0 ...
+  318.                     
+  319.                         // gather values on quads to PE 0
+  320.  + Ip  I                vector<double> qvar(nquads), gqvar(gnquads);
+  321.  + Fr4------------<     for (int q = 0; q < nquads; ++q) {
+  322.    Fr4 I                    qvar[q] = var[quads[q]];
+  323.    Fr4------------>     }
+  324.  + I                    Parallel::gatherv(&qvar[0], nquads, &gqvar[0], &penquads[0]);
+  325.                     
+  326.                         // write values on quads
+  327.                         if (mype == 0 && gnquads > 0) {
+  328.  +                          ofs << "quad4" << endl;
+  329.  + 1--------------<         for (int q = 0; q < gnquads; ++q) {
+  330.  + 1 I                          ofs << setw(12) << gqvar[q] << endl;
+  331.    1-------------->         }
+  332.                         } // if mype == 0 ...
+  333.                     
+  334.                         // gather values on others to PE 0
+  335.  + Ip  I                vector<double> ovar(nothers), govar(gnothers);
+  336.  + Fr4------------<     for (int n = 0; n < nothers; ++n) {
+  337.    Fr4 I                    ovar[n] = var[others[n]];
+  338.    Fr4------------>     }
+  339.  + I                    Parallel::gatherv(&ovar[0], nothers, &govar[0], &penothers[0]);
+  340.                     
+  341.                         // write values on others
+  342.                         if (mype == 0 && gnothers > 0) {
+  343.  +                          ofs << "nsided" << endl;
+  344.  + 1--------------<         for (int n = 0; n < gnothers; ++n) {
+  345.  + 1 I                          ofs << setw(12) << govar[n] << endl;
+  346.    1-------------->         }
+  347.                         } // if mype == 0 ...
+  348.                     
+  349.  +                      if (mype == 0) ofs.close();
+  350.                     
+  351.                     }
+  352.                     
+  353.                     
+  354.                     void ExportGold::sortZones() {
+  355.                     
+  356.                         const int numz = mesh->numz;
+  357.                         const int* znump = mesh->znump;
+  358.                     
+  359.  +                      mapzs.resize(numz);
+  360.                     
+  361.                         // sort zones by size, create an inverse map
+  362.                         int scount = 0;
+  363.  + 1--------------<     for (int z = 0; z < numz; ++z) {
+  364.    1                        int zsize = znump[z];
+  365.    1                        if (zsize == 3)
+  366.  + 1                            tris.push_back(z);
+  367.    1                        else if (zsize == 4)
+  368.  + 1                            quads.push_back(z);
+  369.    1                        else // zsize > 4
+  370.  + 1                            others.push_back(z);
+  371.    1 I                      mapzs[z] = scount;
+  372.    1                        scount += zsize;
+  373.    1-------------->     } // for z
+  374.                     
+  375.                     }
+  376.                     
+
+CC-6002 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 1 
+  A loop was eliminated by optimization.
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:99) was textually inlined.
+
+CC-6254 CC: VECTOR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 579.
+
+CC-6254 CC: VECTOR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 579.
+
+CC-6254 CC: VECTOR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was not vectorized because a recurrence was found on "__cur" at line 579.
+
+CC-6002 CC: SCALAR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was eliminated by optimization.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny leaf routine "__normal_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:780) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_vector.h, Line = 1640, Column = 18 
+  Tiny leaf routine "move_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:1030) was textually inlined.
+
+CC-6254 CC: VECTOR _M_default_append, File = vector.tcc, Line = 595 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 595.
+
+CC-6254 CC: VECTOR _M_default_append, File = vector.tcc, Line = 613 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 613.
+
+CC-3021 CC: IPA __sti___fce1d20d_f3fedd2f, File = iostream, Line = 74, Column = 25 
+  "Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA <unnamed>, File = stl_numeric.h, Line = 250, Column = 18 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_numeric.h, Line = 250, Column = 18 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_numeric.h, Line = 250, Column = 18 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:99) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:26) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny leaf routine "~double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:29) was textually inlined.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ExportGold, File = ExportGold.cc, Line = 28, Column = 43 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~ExportGold, File = ExportGold.cc, Line = 30, Column = 28 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA write, File = ExportGold.cc, Line = 41, Column = 5 
+  Tiny routine "writeCaseFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:53) was textually inlined.  NOT INLINED:
+   basic_string : append : ~basic_string : c_str : <unnamed> : good : operator<<<char_traits<char>> : operator<<<char,
+  char_traits<char>, allocator<char>> : operator<< : exit : operator<<.
+
+CC-3118 CC: IPA write, File = ExportGold.cc, Line = 43, Column = 5 
+  "sortZones"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:354) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA write, File = ExportGold.cc, Line = 44, Column = 5 
+  "writeGeoFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:88) was not inlined because the call site will not
+  flatten.  "_ZNSt14basic_ofstreamIcSt11char_traitsIcEED1Ev" is missing.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 46, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 46, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA write, File = ExportGold.cc, Line = 46, Column = 5 
+  "writeVarFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:274) was not inlined because the call site will not
+  flatten.  "_ZNSt14basic_ofstreamIcSt11char_traitsIcEED1Ev" is missing.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 46, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 46, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 47, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 47, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA write, File = ExportGold.cc, Line = 47, Column = 5 
+  "writeVarFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:274) was not inlined because the call site will not
+  flatten.  "_ZNSt14basic_ofstreamIcSt11char_traitsIcEED1Ev" is missing.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 47, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 47, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 48, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 48, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA write, File = ExportGold.cc, Line = 48, Column = 5 
+  "writeVarFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:274) was not inlined because the call site will not
+  flatten.  "_ZNSt14basic_ofstreamIcSt11char_traitsIcEED1Ev" is missing.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 48, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = ExportGold.cc, Line = 48, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 59, Column = 18 
+  Tiny routine "operator+<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:5925) was textually inlined.  NOT INLINED: 
+  basic_string : append : ~basic_string.
+
+CC-6002 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 60 
+  A loop was eliminated by optimization.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 60, Column = 14 
+  "c_str" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 60, Column = 14 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 60, Column = 14 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 61, Column = 5 
+  "good" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 62, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 62, Column = 9 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 62, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 62, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 64, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 68, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 68, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 69, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 69, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 70, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 70, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 72, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 72, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 73, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 73, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 75, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 75, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 76, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 76, Column = 5 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 76, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 76, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 78, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 78, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 79, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 79, Column = 5 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 79, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 79, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 80, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 80, Column = 5 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 80, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 80, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 81, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 81, Column = 5 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 81, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 81, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeCaseFile, File = ExportGold.cc, Line = 83, Column = 5 
+  "close" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 96, Column = 14 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3165 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 98, Column = 22 
+  "operator+<char, char_traits<char>, allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:5925) was not
+  inlined because of deferred implementation - nested Call_Landing_Label_Opr.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 99, Column = 9 
+  "c_str" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 99, Column = 9 
+  "open" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 100, Column = 9 
+  "good" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 101, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 101, Column = 13 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 101, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 101, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 103, Column = 13 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 105, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 109, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 110, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 110, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 110, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 110, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 110, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 111, Column = 9 
+  Tiny leaf routine "setprecision"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:195) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 111, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 112, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 112, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 112, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 112, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 112, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 113, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 113, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 114, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 114, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 117, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 117, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 118, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 118, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 118, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 118, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 119, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 119, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 127, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 128 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 128.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 128, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 128, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 128, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 129, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 129, Column = 5 
+  "gather" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 130 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 130.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 130, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 130, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 130, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 131 
+  A loop was unrolled 4 times.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 131 
+  A loop was not vectorized because a recurrence was found on "__value" at line 131.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 131, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 131, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 131, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 131, Column = 5 
+  Tiny routine "partial_sum<iterator, value_type *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:237) was textually
+  inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 133, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 133, Column = 5 
+  "scatter" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 134 
+  A loop was not vectorized because a recurrence was found on "__cur" at line 134.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 134, Column = 21 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 134, Column = 21 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 134, Column = 21 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 135, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 135, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 135, Column = 5 
+  "gatherv<double2>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 139, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 139, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 140, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 140, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 140, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 140, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 141, Column = 9 
+  Tiny leaf routine "setprecision"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:195) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 141, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 142 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 143.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 143, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 143, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 143, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 143, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 143, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 144 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 145.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 145, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 145, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 145, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 145, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 145, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 147 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 148.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 148, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 148, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 148, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 148, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 154, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 155, Column = 22 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 156, Column = 23 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-3118 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 159, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:824) was not inlined because the call site will not flatten.
+   "_Znwm" is missing.
+
+CC-3118 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 160, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:824) was not inlined because the call site will not flatten.
+   "_Znwm" is missing.
+
+CC-3118 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 161, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:824) was not inlined because the call site will not flatten.
+   "_Znwm" is missing.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 163, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 163, Column = 5 
+  "gather" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 164, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 164, Column = 5 
+  "gather" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 165, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 165, Column = 5 
+  "gather" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 167 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 167 
+  A loop was vectorized.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 167, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 167, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 167, Column = 5 
+  Tiny routine "accumulate<iterator, int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:120) was textually inlined
+  and flattened.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 168 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 168 
+  A loop was vectorized.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 168, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 168, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 168, Column = 5 
+  Tiny routine "accumulate<iterator, int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:120) was textually inlined
+  and flattened.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 169 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 169 
+  A loop was vectorized.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 169, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 169, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 169, Column = 5 
+  Tiny routine "accumulate<iterator, int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:120) was textually inlined
+  and flattened.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 171 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 171.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 171, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 171, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 171, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 174 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 174.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 174, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 174, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 174, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 175 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 175.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 175, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 175, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 175, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 175, Column = 32 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 175, Column = 32 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 175, Column = 32 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 176, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 176, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 176, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 176, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-6299 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 178 
+  A loop was not vectorized because a recurrence was found involving "this" at line 179.
+
+CC-3182 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 178, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 179, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 179, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 181 
+  A loop was unrolled 4 times.
+
+CC-6299 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 181 
+  A loop was not vectorized because a recurrence was found involving "offset" at line 185.
+
+CC-3182 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 181, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 182, Column = 15 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 183, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-6008 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 184 
+  A loop was unwound.
+
+CC-3182 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 184, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 185, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 188, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 188, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 188, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 188, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 192, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 192, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 193, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 193, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 193, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 193, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 194 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 195.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 195, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 195, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 195, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 195, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 195, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 196 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 198.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 197 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 198.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 198, Column = 17 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 198, Column = 17 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 198, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 198, Column = 17 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 199, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 204 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 204.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 204, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 204, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 204, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 205 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 205.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 205, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 205, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 205, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 205, Column = 34 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 205, Column = 34 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 205, Column = 34 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 206, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 206, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 206, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 206, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-6299 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 208 
+  A loop was not vectorized because a recurrence was found involving "this" at line 209.
+
+CC-3182 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 208, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 209, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 209, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 211 
+  A loop was unrolled 2 times.
+
+CC-6299 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 211 
+  A loop was not vectorized because a recurrence was found involving "offset" at line 215.
+
+CC-3182 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 211, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 212, Column = 15 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 213, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-6008 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 214 
+  A loop was unwound.
+
+CC-3182 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 214, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 215, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 218, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 218, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 218, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 218, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 222, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 222, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 223, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 223, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 223, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 223, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 224 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 225.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 225, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 225, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 225, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 225, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 225, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 226 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 228.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 227 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 228.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 228, Column = 17 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 228, Column = 17 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 228, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 228, Column = 17 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 229, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 234 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 234.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 234, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 234, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 234, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 234, Column = 37 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 235 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 235.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 235, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 235, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 235, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 235, Column = 36 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 235, Column = 36 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 235, Column = 36 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 236, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 236, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 236, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 236, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 237 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 242.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 238, Column = 15 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 239, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 240, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 241 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 242.
+
+CC-3118 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 242, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 245, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 245, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 245, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 245, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 246, Column = 14 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 247, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 247, Column = 5 
+  "gather" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR writeGeoFile, File = ExportGold.cc, Line = 248 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 248 
+  A loop was vectorized.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 248, Column = 15 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 248, Column = 15 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 248, Column = 15 
+  Tiny routine "accumulate<iterator, int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:120) was textually inlined
+  and flattened.
+
+CC-6254 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 249 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 249.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 249, Column = 17 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 249, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 250, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 250, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 250, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 250, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 254, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 254, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 255, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 255, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 255, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 255, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 256 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 257.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 257, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 257, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 257, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 257, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 257, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 258 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 259.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 259, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 259, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 259, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 259, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 259, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 261 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 263.
+
+CC-6287 CC: VECTOR writeGeoFile, File = ExportGold.cc, Line = 262 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 263.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 262, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 262, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 263, Column = 17 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 263, Column = 17 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 263, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 263, Column = 17 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 264, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 265, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeGeoFile, File = ExportGold.cc, Line = 269, Column = 20 
+  "close" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 281, Column = 14 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3165 CC: IPA writeVarFile, File = ExportGold.cc, Line = 283, Column = 22 
+  "operator+<char, char_traits<char>, allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:5925) was not
+  inlined because of deferred implementation - nested Call_Landing_Label_Opr.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 283, Column = 22 
+  Tiny routine "operator+<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:5953) was textually inlined.  NOT INLINED:  append
+  : basic_string.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 283, Column = 22 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 284, Column = 9 
+  "c_str" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 284, Column = 9 
+  "open" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 285, Column = 9 
+  "good" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 286, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 286, Column = 13 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 286, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 286, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 288, Column = 13 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 290, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 294, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 294, Column = 9 
+  Tiny leaf routine "setprecision"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:195) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 294, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 295, Column = 9 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 295, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 296, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 296, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 297, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 297, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 297, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 297, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 300, Column = 15 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 301, Column = 16 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 302, Column = 17 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:805) was textually inlined.
+
+CC-6254 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 305 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 305.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 305, Column = 20 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 305, Column = 20 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 305, Column = 20 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 305, Column = 33 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 305, Column = 33 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 305, Column = 33 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6005 CC: SCALAR writeVarFile, File = ExportGold.cc, Line = 306 
+  A loop was unrolled 4 times.
+
+CC-6299 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 306 
+  A loop was not vectorized because a recurrence was found involving "var" at line 307.
+
+CC-3182 CC: IPA writeVarFile, File = ExportGold.cc, Line = 306, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 307, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 307, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 309, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 309, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 309, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 309, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 313, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 313, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 314 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 315.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 315, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 315, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 315, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 315, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 315, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 320 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 320.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 320, Column = 20 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 320, Column = 20 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 320, Column = 20 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 320, Column = 34 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 320, Column = 34 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 320, Column = 34 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6005 CC: SCALAR writeVarFile, File = ExportGold.cc, Line = 321 
+  A loop was unrolled 4 times.
+
+CC-6299 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 321 
+  A loop was not vectorized because a recurrence was found involving "var" at line 322.
+
+CC-3182 CC: IPA writeVarFile, File = ExportGold.cc, Line = 321, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 322, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 322, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 324, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 324, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 324, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 324, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 328, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 328, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 329 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 330.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 330, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 330, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 330, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 330, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 330, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 335 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 335.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 335, Column = 20 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 335, Column = 20 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 335, Column = 20 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 335, Column = 35 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:131) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 335, Column = 35 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 335, Column = 35 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:139) was textually inlined.
+
+CC-6005 CC: SCALAR writeVarFile, File = ExportGold.cc, Line = 336 
+  A loop was unrolled 4 times.
+
+CC-6299 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 336 
+  A loop was not vectorized because a recurrence was found involving "var" at line 337.
+
+CC-3182 CC: IPA writeVarFile, File = ExportGold.cc, Line = 336, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 337, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 337, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 339, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 339, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 339, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 339, Column = 5 
+  "gatherv<value_type>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 343, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 343, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR writeVarFile, File = ExportGold.cc, Line = 344 
+  A loop was not vectorized because it contains a call to function "std::basic_ostream<T1, T2> & std::operator <<<char,
+  std::char_traits<char>>" on line 345.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 345, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 345, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeVarFile, File = ExportGold.cc, Line = 345, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 345, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 345, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeVarFile, File = ExportGold.cc, Line = 349, Column = 20 
+  "close" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA sortZones, File = ExportGold.cc, Line = 359, Column = 5 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:824) was not inlined because the call site will not flatten.
+   "_Znwm" is missing.
+
+CC-6287 CC: VECTOR sortZones, File = ExportGold.cc, Line = 363 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 366.
+
+CC-3118 CC: IPA sortZones, File = ExportGold.cc, Line = 366, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA sortZones, File = ExportGold.cc, Line = 368, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA sortZones, File = ExportGold.cc, Line = 370, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA sortZones, File = ExportGold.cc, Line = 371, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/ExportGold.cc:930) was textually inlined.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

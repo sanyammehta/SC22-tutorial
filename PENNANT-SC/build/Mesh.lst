@@ -1,0 +1,2384 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/Mesh.o src/Mesh.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc
+Date     : 06/04/2020  18:09:54
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.  + D----------------<> /*
+    2.                         * Mesh.cc
+    3.                         *
+    4.                         *  Created on: Jan 5, 2012
+    5.                         *      Author: cferenba
+    6.                         *
+    7.                         * Copyright (c) 2012, Triad National Security, LLC.
+    8.                         * All rights reserved.
+    9.                         * Use of this source code is governed by a BSD-style open-source
+   10.                         * license; see top-level LICENSE file for full license text.
+   11.                         */
+   12.                        
+   13.                        #include "Mesh.hh"
+   14.                        
+   15.                        #include <stdint.h>
+   16.                        #include <cmath>
+   17.                        #include <iostream>
+   18.                        #include <algorithm>
+   19.                        
+   20.                        #include "Vec2.hh"
+   21.                        #include "Memory.hh"
+   22.                        #include "Parallel.hh"
+   23.                        #include "InputFile.hh"
+   24.                        #include "GenMesh.hh"
+   25.                        #include "WriteXY.hh"
+   26.                        #include "ExportGold.hh"
+   27.                        
+   28.                        using namespace std;
+   29.                        
+   30.                        
+   31.                        Mesh::Mesh(const InputFile* inp) :
+   32.    Ip                      gmesh(NULL), egold(NULL), wxy(NULL) {
+   33.                        
+   34.                            using Parallel::mype;
+   35.                        
+   36.  +                         chunksize = inp->getInt("chunksize", 0);
+   37.                            if (chunksize < 0) {
+   38.                                if (mype == 0)
+   39.  +                                 cerr << "Error: bad chunksize " << chunksize << endl;
+   40.  +                             exit(1);
+   41.                            }
+   42.                        
+   43.  + Ip                      subregion = inp->getDoubleList("subregion", vector<double>());
+   44.    I                       if (subregion.size() != 0 && subregion.size() != 4) {
+   45.                                if (mype == 0)
+   46.  +                                 cerr << "Error:  subregion must have 4 entries" << endl;
+   47.  +                             exit(1);
+   48.                            }
+   49.                        
+   50.  +                         writexy = inp->getInt("writexy", 0);
+   51.  +                         writegold = inp->getInt("writegold", 0);
+   52.                        
+   53.  +                         gmesh = new GenMesh(inp);
+   54.  +                         wxy = new WriteXY(this);
+   55.  +                         egold = new ExportGold(this);
+   56.                        
+   57.  +                         init();
+   58.                        }
+   59.                        
+   60.                        
+   61.                        Mesh::~Mesh() {
+   62.  + I                       delete gmesh;
+   63.  + I                       delete wxy;
+   64.  + I                       delete egold;
+   65.    Ip                  }
+   66.                        
+   67.                        
+   68.                        void Mesh::init() {
+   69.                        
+   70.                            // generate mesh
+   71.    Ip                      vector<double2> nodepos;
+   72.    Ip                      vector<int> cellstart, cellsize, cellnodes;
+   73.    Ip                      vector<int> slavemstrpes, slavemstrcounts, slavepoints;
+   74.  + Ip  I                   vector<int> masterslvpes, masterslvcounts, masterpoints;
+   75.  +                         gmesh->generate(nodepos, cellstart, cellsize, cellnodes,
+   76.                                    slavemstrpes, slavemstrcounts, slavepoints,
+   77.                                    masterslvpes, masterslvcounts, masterpoints);
+   78.                        
+   79.    I                       nump = nodepos.size();
+   80.    I                       numz = cellstart.size();
+   81.    I                       nums = cellnodes.size();
+   82.                            numc = nums;
+   83.                        
+   84.                            // copy cell sizes to mesh
+   85.    I                       znump = Memory::alloc<int>(numz);
+   86.    I                       copy(cellsize.begin(), cellsize.end(), znump);
+   87.                        
+   88.                            // populate maps:
+   89.                            // use the cell* arrays to populate the side maps
+   90.  + r2 I-------------<>     initSides(cellstart, cellsize, cellnodes);
+   91.                            // release memory from cell* arrays
+   92.  + Ip                      cellstart.resize(0);
+   93.  + Ip                      cellsize.resize(0);
+   94.  + Ip                      cellnodes.resize(0);
+   95.                            // now populate edge maps using side maps
+   96.  +                         initEdges();
+   97.                        
+   98.                            // populate chunk information
+   99.  +                         initChunks();
+  100.                        
+  101.                            // create inverse map for corner-to-point gathers
+  102.  +                         initInvMap();
+  103.                        
+  104.                            // calculate parallel data structures
+  105.  +                         initParallel(slavemstrpes, slavemstrcounts, slavepoints,
+  106.                                    masterslvpes, masterslvcounts, masterpoints);
+  107.                            // release memory from parallel-related arrays
+  108.  + Ip                      slavemstrpes.resize(0);
+  109.  + Ip                      slavemstrcounts.resize(0);
+  110.  + Ip                      slavepoints.resize(0);
+  111.  + Ip                      masterslvpes.resize(0);
+  112.  + Ip                      masterslvcounts.resize(0);
+  113.  + Ip                      masterpoints.resize(0);
+  114.                        
+  115.                            // write mesh statistics
+  116.    Ip                      writeStats();
+  117.                        
+  118.                            // allocate remaining arrays
+  119.    I                       px = Memory::alloc<double2>(nump);
+  120.    I                       ex = Memory::alloc<double2>(nume);
+  121.    I                       zx = Memory::alloc<double2>(numz);
+  122.    I                       px0 = Memory::alloc<double2>(nump);
+  123.    I                       pxp = Memory::alloc<double2>(nump);
+  124.    I                       exp = Memory::alloc<double2>(nume);
+  125.    I                       zxp = Memory::alloc<double2>(numz);
+  126.    I                       sarea = Memory::alloc<double>(nums);
+  127.    I                       svol = Memory::alloc<double>(nums);
+  128.    I                       zarea = Memory::alloc<double>(numz);
+  129.    I                       zvol = Memory::alloc<double>(numz);
+  130.    I                       sareap = Memory::alloc<double>(nums);
+  131.    I                       svolp = Memory::alloc<double>(nums);
+  132.    I                       zareap = Memory::alloc<double>(numz);
+  133.    I                       zvolp = Memory::alloc<double>(numz);
+  134.    I                       zvol0 = Memory::alloc<double>(numz);
+  135.    I                       ssurfp = Memory::alloc<double2>(nums);
+  136.    I                       elen = Memory::alloc<double>(nume);
+  137.    I                       zdl = Memory::alloc<double>(numz);
+  138.    I                       smf = Memory::alloc<double>(nums);
+  139.                        
+  140.                            // do a few initial calculations
+  141.                            #pragma omp parallel for schedule(static)
+  142.  + MmF---------------<     for (int pch = 0; pch < numpch; ++pch) {
+  143.    MmF I                       int pfirst = pchpfirst[pch];
+  144.    MmF I                       int plast = pchplast[pch];
+  145.    MmF                         // copy nodepos into px, distributed across threads
+  146.  + MmF Fr4-----------<         for (int p = pfirst; p < plast; ++p)
+  147.    MmF Fr4 I--------->             px[p] = nodepos[p];
+  148.    MmF                 
+  149.    MmF--------------->     }
+  150.                        
+  151.                            numsbad = 0;
+  152.                            #pragma omp parallel for schedule(static)
+  153.  + MmF---------------<     for (int sch = 0; sch < numsch; ++sch) {
+  154.    MmF I                       int sfirst = schsfirst[sch];
+  155.    MmF I                       int slast = schslast[sch];
+  156.    MmF Vpr2 I-------<>         calcCtrs(px, ex, zx, sfirst, slast);
+  157.    MmF Vpr4 I-------<>         calcVols(px, zx, sarea, svol, zarea, zvol, sfirst, slast);
+  158.    MmF Vr2 I--------<>         calcSideFracs(sarea, zarea, smf, sfirst, slast);
+  159.    MmF--------------->     }
+  160.    Ip                      checkBadSides();
+  161.                        
+  162.                        }
+  163.                        
+  164.                        
+  165.                        void Mesh::initSides(
+  166.                                const vector<int>& cellstart,
+  167.                                const vector<int>& cellsize,
+  168.                                const vector<int>& cellnodes) {
+  169.                        
+  170.    I                       mapsp1 = Memory::alloc<int>(nums);
+  171.    I                       mapsp2 = Memory::alloc<int>(nums);
+  172.    I                       mapsz  = Memory::alloc<int>(nums);
+  173.    I                       mapss3 = Memory::alloc<int>(nums);
+  174.    I                       mapss4 = Memory::alloc<int>(nums);
+  175.                        
+  176.  + F-----------------<     for (int z = 0; z < numz; ++z) {
+  177.    F I                         int sbase = cellstart[z];
+  178.    F I                         int size = cellsize[z];
+  179.  + F Fr2-------------<         for (int n = 0; n < size; ++n) {
+  180.    F Fr2                           int s = sbase + n;
+  181.    F Fr2                           int snext = sbase + (n + 1 == size ? 0 : n + 1);
+  182.    F Fr2                           int slast = sbase + (n == 0 ? size : n) - 1;
+  183.    F Fr2                           mapsz[s] = z;
+  184.    F Fr2 I                         mapsp1[s] = cellnodes[s];
+  185.    F Fr2 I                         mapsp2[s] = cellnodes[snext];
+  186.    F Fr2                           mapss3[s] = slast;
+  187.    F Fr2                           mapss4[s] = snext;
+  188.    F Fr2------------->         } // for n
+  189.    F----------------->     } // for z
+  190.                        
+  191.                        }
+  192.                        
+  193.                        
+  194.                        void Mesh::initEdges() {
+  195.                        
+  196.  + I                       vector<vector<int> > edgepp(nump), edgepe(nump);
+  197.                        
+  198.    I                       mapse = Memory::alloc<int>(nums);
+  199.                        
+  200.                            int e = 0;
+  201.  + 1-----------------<     for (int s = 0; s < nums; ++s) {
+  202.    1 I                         int p1 = min(mapsp1[s], mapsp2[s]);
+  203.    1 I                         int p2 = max(mapsp1[s], mapsp2[s]);
+  204.    1                   
+  205.    1 I                         vector<int>& vpp = edgepp[p1];
+  206.    1 I                         vector<int>& vpe = edgepe[p1];
+  207.  + 1 I                         int i = find(vpp.begin(), vpp.end(), p2) - vpp.begin();
+  208.    1 I                         if (i == vpp.size()) {
+  209.    1                               // (p, p2) isn't in the edge list - add it
+  210.  + 1                               vpp.push_back(p2);
+  211.  + 1                               vpe.push_back(e);
+  212.    1                               ++e;
+  213.    1                           }
+  214.    1 I                         mapse[s] = vpe[i];
+  215.    1----------------->     }  // for s
+  216.                        
+  217.                            nume = e;
+  218.                        
+  219.                        }
+  220.                        
+  221.                        
+  222.                        void Mesh::initChunks() {
+  223.                        
+  224.    I                       if (chunksize == 0) chunksize = max(nump, nums);
+  225.                        
+  226.                            // compute side chunks
+  227.                            // use 'chunksize' for maximum chunksize; decrease as needed
+  228.                            // to ensure that no zone has its sides split across chunk
+  229.                            // boundaries
+  230.                            int s1, s2 = 0;
+  231.  + 1-----------------<     while (s2 < nums) {
+  232.    1                           s1 = s2;
+  233.    1 I                         s2 = min(s2 + chunksize, nums);
+  234.  + 1 2---------------<         while (s2 < nums && mapsz[s2] == mapsz[s2-1])
+  235.    1 2--------------->             --s2;
+  236.  + 1                           schsfirst.push_back(s1);
+  237.  + 1                           schslast.push_back(s2);
+  238.  + 1                           schzfirst.push_back(mapsz[s1]);
+  239.  + 1                           schzlast.push_back(mapsz[s2-1] + 1);
+  240.    1----------------->     }
+  241.    I                       numsch = schsfirst.size();
+  242.                        
+  243.                            // compute point chunks
+  244.                            int p1, p2 = 0;
+  245.  + 1-----------------<     while (p2 < nump) {
+  246.    1                           p1 = p2;
+  247.    1 I                         p2 = min(p2 + chunksize, nump);
+  248.  + 1                           pchpfirst.push_back(p1);
+  249.  + 1                           pchplast.push_back(p2);
+  250.    1----------------->     }
+  251.    I                       numpch = pchpfirst.size();
+  252.                        
+  253.                            // compute zone chunks
+  254.    Ip  I                   int z1, z2 = 0;
+  255.  + 1-----------------<     while (z2 < numz) {
+  256.    1                           z1 = z2;
+  257.    1 I                         z2 = min(z2 + chunksize, numz);
+  258.  + 1                           zchzfirst.push_back(z1);
+  259.  + 1                           zchzlast.push_back(z2);
+  260.    1----------------->     }
+  261.    I                       numzch = zchzfirst.size();
+  262.                        
+  263.                        }
+  264.                        
+  265.                        
+  266.                        void Mesh::initInvMap() {
+  267.    I                       mappcfirst = Memory::alloc<int>(nump);
+  268.    I                       mapccnext = Memory::alloc<int>(nums);
+  269.                        
+  270.  + Ip  I                   vector<pair<int, int> > pcpair(nums);
+  271.  + F-----------------<     for (int c = 0; c < numc; ++c)
+  272.    F I--------------->         pcpair[c] = make_pair(mapsp1[c], c);
+  273.  + I                       sort(pcpair.begin(), pcpair.end());
+  274.  + F-----------------<     for (int i = 0; i < numc; ++i) {
+  275.    F I                         int p = pcpair[i].first;
+  276.    F I                         int pp = pcpair[i+1].first;
+  277.    F I                         int pm = pcpair[i-1].first;
+  278.    F I                         int c = pcpair[i].second;
+  279.    F I                         int cp = pcpair[i+1].second;
+  280.    F                   
+  281.    F                           if (i == 0 || p != pm)  mappcfirst[p] = c;
+  282.    F                           if (i+1 == numc || p != pp)
+  283.    F                               mapccnext[c] = -1;
+  284.    F                           else
+  285.    F                               mapccnext[c] = cp;
+  286.    F----------------->     }
+  287.                        
+  288.                        }
+  289.                        
+  290.                        
+  291.                        void Mesh::initParallel(
+  292.                                const vector<int>& slavemstrpes,
+  293.                                const vector<int>& slavemstrcounts,
+  294.                                const vector<int>& slavepoints,
+  295.                                const vector<int>& masterslvpes,
+  296.                                const vector<int>& masterslvcounts,
+  297.                                const vector<int>& masterpoints) {
+  298.                            if (Parallel::numpe == 1) return;
+  299.                        
+  300.    I                       nummstrpe = slavemstrpes.size();
+  301.    I                       mapmstrpepe = Memory::alloc<int>(nummstrpe);
+  302.    I                       copy(slavemstrpes.begin(), slavemstrpes.end(), mapmstrpepe);
+  303.    I                       mstrpenumslv = Memory::alloc<int>(nummstrpe);
+  304.    I                       copy(slavemstrcounts.begin(), slavemstrcounts.end(), mstrpenumslv);
+  305.    I                       mapmstrpeslv1 = Memory::alloc<int>(nummstrpe);
+  306.                            int count = 0;
+  307.  + 1-----------------<     for (int mstrpe = 0; mstrpe < nummstrpe; ++mstrpe) {
+  308.    1                           mapmstrpeslv1[mstrpe] = count;
+  309.    1                           count += mstrpenumslv[mstrpe];
+  310.    1----------------->     }
+  311.    I                       numslv = slavepoints.size();
+  312.    I                       mapslvp = Memory::alloc<int>(numslv);
+  313.    I                       copy(slavepoints.begin(), slavepoints.end(), mapslvp);
+  314.                        
+  315.    I                       numslvpe = masterslvpes.size();
+  316.    I                       mapslvpepe = Memory::alloc<int>(numslvpe);
+  317.    I                       copy(masterslvpes.begin(), masterslvpes.end(), mapslvpepe);
+  318.    I                       slvpenumprx = Memory::alloc<int>(numslvpe);
+  319.    I                       copy(masterslvcounts.begin(), masterslvcounts.end(), slvpenumprx);
+  320.    I                       mapslvpeprx1 = Memory::alloc<int>(numslvpe);
+  321.                            count = 0;
+  322.  + 1-----------------<     for (int slvpe = 0; slvpe < numslvpe; ++slvpe) {
+  323.    1                           mapslvpeprx1[slvpe] = count;
+  324.    1                           count += slvpenumprx[slvpe];
+  325.    1----------------->     }
+  326.    I                       numprx = masterpoints.size();
+  327.    I                       mapprxp = Memory::alloc<int>(numprx);
+  328.    I                       copy(masterpoints.begin(), masterpoints.end(), mapprxp);
+  329.                        
+  330.                        }
+  331.                        
+  332.                        
+  333.                        void Mesh::writeStats() {
+  334.                        
+  335.                            int64_t gnump = nump;
+  336.                            // make sure that boundary points aren't double-counted;
+  337.                            // only count them if they are masters
+  338.                            if (Parallel::numpe > 1) gnump -= numslv;
+  339.                            int64_t gnumz = numz;
+  340.                            int64_t gnums = nums;
+  341.                            int64_t gnume = nume;
+  342.                            int gnumpch = numpch;
+  343.                            int gnumzch = numzch;
+  344.    Ip                      int gnumsch = numsch;
+  345.                        
+  346.  +                         Parallel::globalSum(gnump);
+  347.  +                         Parallel::globalSum(gnumz);
+  348.  +                         Parallel::globalSum(gnums);
+  349.  +                         Parallel::globalSum(gnume);
+  350.  +                         Parallel::globalSum(gnumpch);
+  351.  +                         Parallel::globalSum(gnumzch);
+  352.  +                         Parallel::globalSum(gnumsch);
+  353.                        
+  354.                            if (Parallel::mype > 0) return;
+  355.                        
+  356.  +                         cout << "--- Mesh Information ---" << endl;
+  357.  +                         cout << "Points:  " << gnump << endl;
+  358.  +                         cout << "Zones:  "  << gnumz << endl;
+  359.  +                         cout << "Sides:  "  << gnums << endl;
+  360.  +                         cout << "Edges:  "  << gnume << endl;
+  361.  +                         cout << "Side chunks:  " << gnumsch << endl;
+  362.  +                         cout << "Point chunks:  " << gnumpch << endl;
+  363.  +                         cout << "Zone chunks:  " << gnumzch << endl;
+  364.  +                         cout << "Chunk size:  " << chunksize << endl;
+  365.  +                         cout << "------------------------" << endl;
+  366.                        
+  367.                        }
+  368.                        
+  369.                        
+  370.                        void Mesh::write(
+  371.                                const string& probname,
+  372.                                const int cycle,
+  373.                                const double time,
+  374.                                const double* zr,
+  375.                                const double* ze,
+  376.                                const double* zp) {
+  377.                        
+  378.                            if (writexy) {
+  379.                                if (Parallel::mype == 0)
+  380.  +                                 cout << "Writing .xy file..." << endl;
+  381.  +                             wxy->write(probname, zr, ze, zp);
+  382.                            }
+  383.                            if (writegold) {
+  384.                                if (Parallel::mype == 0) 
+  385.  +                                 cout << "Writing gold file..." << endl;
+  386.  +                             egold->write(probname, cycle, time, zr, ze, zp);
+  387.                            }
+  388.                        
+  389.                        }
+  390.                        
+  391.                        
+  392.                        vector<int> Mesh::getXPlane(const double c) {
+  393.                        
+  394.    Ip                      vector<int> mapbp;
+  395.    Ip                      const double eps = 1.e-12;
+  396.                        
+  397.  + 1-----------------<     for (int p = 0; p < nump; ++p) {
+  398.    1                           if (fabs(px[p].x - c) < eps) {
+  399.  + 1                               mapbp.push_back(p);
+  400.    1                           }
+  401.    1----------------->     }
+  402.                            return mapbp;
+  403.                        
+  404.                        }
+  405.                        
+  406.                        
+  407.                        vector<int> Mesh::getYPlane(const double c) {
+  408.                        
+  409.    Ip                      vector<int> mapbp;
+  410.                            const double eps = 1.e-12;
+  411.                        
+  412.  + 1-----------------<     for (int p = 0; p < nump; ++p) {
+  413.    1                           if (fabs(px[p].y - c) < eps) {
+  414.  + 1                               mapbp.push_back(p);
+  415.    1                           }
+  416.    1----------------->     }
+  417.                            return mapbp;
+  418.                        
+  419.                        }
+  420.                        
+  421.                        
+  422.                        void Mesh::getPlaneChunks(
+  423.                                const int numb,
+  424.                                const int* mapbp,
+  425.                                vector<int>& pchbfirst,
+  426.                                vector<int>& pchblast) {
+  427.                        
+  428.    D Ip-------------<>     pchbfirst.resize(0);
+  429.    D Ip-------------<>     pchblast.resize(0);
+  430.                        
+  431.                            // compute boundary point chunks
+  432.                            // (boundary points contained in each point chunk)
+  433.                            int bf, bl = 0;
+  434.  + 1-----------------<     for (int pch = 0; pch < numpch; ++pch) {
+  435.    1 I                          int pl = pchplast[pch];
+  436.    1                            bf = bl;
+  437.  + 1 I                          bl = lower_bound(&mapbp[bf], &mapbp[numb], pl) - &mapbp[0];
+  438.  + 1                            pchbfirst.push_back(bf);
+  439.  + 1                            pchblast.push_back(bl);
+  440.    1----------------->     }
+  441.                        
+  442.                        }
+  443.                        
+  444.                        
+  445.                        void Mesh::calcCtrs(
+  446.                                const double2* px,
+  447.                                double2* ex,
+  448.                                double2* zx,
+  449.                                const int sfirst,
+  450.                                const int slast) {
+  451.                        
+  452.                            int zfirst = mapsz[sfirst];
+  453.                            int zlast = (slast < nums ? mapsz[slast] : numz);
+  454.    Vr2 I------------<>     fill(&zx[zfirst], &zx[zlast], double2(0., 0.));
+  455.                        
+  456.  + Fr4---------------<     for (int s = sfirst; s < slast; ++s) {
+  457.    Fr4                         int p1 = mapsp1[s];
+  458.    Fr4                         int p2 = mapsp2[s];
+  459.    Fr4                         int e = mapse[s];
+  460.    Fr4                         int z = mapsz[s];
+  461.    Fr4 I                       ex[e] = 0.5 * (px[p1] + px[p2]);
+  462.    Fr4 I                       zx[z] += px[p1];
+  463.    Fr4--------------->     }
+  464.                        
+  465.  + VFr2--------------<     for (int z = zfirst; z < zlast; ++z) {
+  466.    VFr2 I                      zx[z] /= (double) znump[z];
+  467.    VFr2-------------->     }
+  468.                        
+  469.                        }
+  470.                        
+  471.                        
+  472.                        void Mesh::calcVols(
+  473.                                const double2* px,
+  474.                                const double2* zx,
+  475.                                double* sarea,
+  476.                                double* svol,
+  477.                                double* zarea,
+  478.                                double* zvol,
+  479.                                const int sfirst,
+  480.                                const int slast) {
+  481.                        
+  482.                            int zfirst = mapsz[sfirst];
+  483.                            int zlast = (slast < nums ? mapsz[slast] : numz);
+  484.    Vr4 I------------<>     fill(&zvol[zfirst], &zvol[zlast], 0.);
+  485.    Vr4 I------------<>     fill(&zarea[zfirst], &zarea[zlast], 0.);
+  486.                        
+  487.                            const double third = 1. / 3.;
+  488.                            int count = 0;
+  489.  + F-----------------<     for (int s = sfirst; s < slast; ++s) {
+  490.    F                           int p1 = mapsp1[s];
+  491.    F                           int p2 = mapsp2[s];
+  492.    F                           int z = mapsz[s];
+  493.    F                   
+  494.    F                           // compute side volumes, sum to zone
+  495.    F I                         double sa = 0.5 * cross(px[p2] - px[p1], zx[z] - px[p1]);
+  496.    F                           double sv = third * sa * (px[p1].x + px[p2].x + zx[z].x);
+  497.    F                           sarea[s] = sa;
+  498.    F                           svol[s] = sv;
+  499.    F                           zarea[z] += sa;
+  500.    F                           zvol[z] += sv;
+  501.    F                   
+  502.    F                           // check for negative side volumes
+  503.    F                           if (sv <= 0.) count += 1;
+  504.    F                   
+  505.    F----------------->     } // for s
+  506.                        
+  507.                            if (count > 0) {
+  508.                                #pragma omp atomic
+  509.                                numsbad += count;
+  510.                            }
+  511.                        
+  512.                        }
+  513.                        
+  514.                        
+  515.                        void Mesh::checkBadSides() {
+  516.                        
+  517.                            // if there were negative side volumes, error exit
+  518.                            if (numsbad > 0) {
+  519.  +                             cerr << "Error: " << numsbad << " negative side volumes" << endl;
+  520.  +                             cerr << "Exiting..." << endl;
+  521.  +                             exit(1);
+  522.                            }
+  523.                        
+  524.                        }
+  525.                        
+  526.                        
+  527.                        void Mesh::calcSideFracs(
+  528.                                const double* sarea,
+  529.                                const double* zarea,
+  530.                                double* smf,
+  531.                                const int sfirst,
+  532.                                const int slast) {
+  533.                        
+  534.                            #pragma ivdep
+  535.    Vr2---------------<     for (int s = sfirst; s < slast; ++s) {
+  536.    Vr2                         int z = mapsz[s];
+  537.    Vr2                         smf[s] = sarea[s] / zarea[z];
+  538.    Vr2--------------->     }
+  539.                        }
+  540.                        
+  541.                        
+  542.                        void Mesh::calcSurfVecs(
+  543.                                const double2* zx,
+  544.                                const double2* ex,
+  545.                                double2* ssurf,
+  546.                                const int sfirst,
+  547.                                const int slast) {
+  548.                        
+  549.                            #pragma ivdep
+  550.  + VFr2--------------<     for (int s = sfirst; s < slast; ++s) {
+  551.    VFr2                        int z = mapsz[s];
+  552.    VFr2                        int e = mapse[s];
+  553.    VFr2                
+  554.    VFr2 I                      ssurf[s] = rotateCCW(ex[e] - zx[z]);
+  555.    VFr2                
+  556.    VFr2-------------->     }
+  557.                        
+  558.                        }
+  559.                        
+  560.                        
+  561.                        void Mesh::calcEdgeLen(
+  562.                                const double2* px,
+  563.                                double* elen,
+  564.                                const int sfirst,
+  565.                                const int slast) {
+  566.                        
+  567.  + Fr2---------------<     for (int s = sfirst; s < slast; ++s) {
+  568.    Fr2                         const int p1 = mapsp1[s];
+  569.    Fr2                         const int p2 = mapsp2[s];
+  570.    Fr2                         const int e = mapse[s];
+  571.    Fr2                 
+  572.    Fr2 I                       elen[e] = length(px[p2] - px[p1]);
+  573.    Fr2                 
+  574.    Fr2--------------->     }
+  575.                        }
+  576.                        
+  577.                        
+  578.                        void Mesh::calcCharLen(
+  579.                                const double* sarea,
+  580.                                double* zdl,
+  581.                                const int sfirst,
+  582.                                const int slast) {
+  583.                        
+  584.                            int zfirst = mapsz[sfirst];
+  585.                            int zlast = (slast < nums ? mapsz[slast] : numz);
+  586.    Vr4 I------------<>     fill(&zdl[zfirst], &zdl[zlast], 1.e99);
+  587.                        
+  588.  + Fr2---------------<     for (int s = sfirst; s < slast; ++s) {
+  589.    Fr2                         int z = mapsz[s];
+  590.    Fr2                         int e = mapse[s];
+  591.    Fr2                 
+  592.    Fr2                         double area = sarea[s];
+  593.    Fr2                         double base = elen[e];
+  594.    Fr2                         double fac = (znump[z] == 3 ? 3. : 4.);
+  595.    Fr2                         double sdl = fac * area / base;
+  596.    Fr2 I                       zdl[z] = min(zdl[z], sdl);
+  597.    Fr2--------------->     }
+  598.                        }
+  599.                        
+  600.                        
+  601.                        template <typename T>
+  602.                        void Mesh::parallelGather(
+  603.                                const T* pvar,
+  604.                                T* prxvar) {
+  605.                        #ifdef USE_MPI
+  606.                            // This routine gathers slave values for which MYPE owns the masters.
+  607.                            const int tagmpi = 100;
+  608.                            const int type_size = sizeof(T);
+  609.                        //    std::vector<T> slvvar(numslv);
+  610.                            T* slvvar = Memory::alloc<T>(numslv);
+  611.                        
+  612.                            // Post receives for incoming messages from slaves.
+  613.                            // Store results in proxy buffer.
+  614.                        //    vector<MPI_Request> request(numslvpe);
+  615.                            MPI_Request* request = Memory::alloc<MPI_Request>(numslvpe);
+  616.    1-----------------<     for (int slvpe = 0; slvpe < numslvpe; ++slvpe) {
+  617.    1                           int pe = mapslvpepe[slvpe];
+  618.    1                           int nprx = slvpenumprx[slvpe];
+  619.    1                           int prx1 = mapslvpeprx1[slvpe];
+  620.    1                           MPI_Irecv(&prxvar[prx1], nprx * type_size, MPI_BYTE,
+  621.    1                                   pe, tagmpi, MPI_COMM_WORLD, &request[slvpe]);
+  622.    1----------------->     }
+  623.                        
+  624.                            // Load slave data buffer from points.
+  625.    1-----------------<     for (int slv = 0; slv < numslv; ++slv) {
+  626.    1                           int p = mapslvp[slv];
+  627.    1                           slvvar[slv] = pvar[p];
+  628.    1----------------->     }
+  629.                        
+  630.                            // Send slave data to master PEs.
+  631.    1-----------------<     for (int mstrpe = 0; mstrpe < nummstrpe; ++mstrpe) {
+  632.    1                           int pe = mapmstrpepe[mstrpe];
+  633.    1                           int nslv = mstrpenumslv[mstrpe];
+  634.    1                           int slv1 = mapmstrpeslv1[mstrpe];
+  635.    1                           MPI_Send(&slvvar[slv1], nslv * type_size, MPI_BYTE,
+  636.    1                                   pe, tagmpi, MPI_COMM_WORLD);
+  637.    1----------------->     }
+  638.                        
+  639.                            // Wait for all receives to complete.
+  640.                        //    vector<MPI_Status> status(numslvpe);
+  641.                            MPI_Status* status = Memory::alloc<MPI_Status>(numslvpe);
+  642.                            int ierr = MPI_Waitall(numslvpe, &request[0], &status[0]);
+  643.                            if (ierr != 0) {
+  644.                                cerr << "Error: parallelGather MPI error " << ierr <<
+  645.                                        " on PE " << Parallel::mype << endl;
+  646.                                cerr << "Exiting..." << endl;
+  647.                                exit(1);
+  648.                            }
+  649.                        
+  650.                            Memory::free(slvvar);
+  651.                            Memory::free(request);
+  652.                            Memory::free(status);
+  653.                        #endif
+  654.                        }
+  655.                        
+  656.                        
+  657.                        template <typename T>
+  658.                        void Mesh::parallelSum(
+  659.                                T* pvar,
+  660.                                T* prxvar) {
+  661.                        #ifdef USE_MPI
+  662.                            // Compute sum of all (proxy/master) sets.
+  663.                            // Store results in master.
+  664.    1-----------------<     for (int prx = 0; prx < numprx; ++prx) {
+  665.    1                           int p = mapprxp[prx];
+  666.    1                           pvar[p] += prxvar[prx];
+  667.    1----------------->     }
+  668.                        
+  669.                            // Copy updated master data back to proxies.
+  670.    1-----------------<     for (int prx = 0; prx < numprx; ++prx) {
+  671.    1                           int p = mapprxp[prx];
+  672.    1                           prxvar[prx] = pvar[p];
+  673.    1----------------->     }
+  674.                        #endif
+  675.                        }
+  676.                        
+  677.                        
+  678.                        template <typename T>
+  679.                        void Mesh::parallelScatter(
+  680.                                T* pvar,
+  681.                                const T* prxvar) {
+  682.                        #ifdef USE_MPI
+  683.                            // This routine scatters master values on MYPE to all slave copies
+  684.                            // owned by other PEs.
+  685.                            const int tagmpi = 200;
+  686.                            const int type_size = sizeof(T);
+  687.                        //    std::vector<T> slvvar(numslv);
+  688.                            T* slvvar = Memory::alloc<T>(numslv);
+  689.                        
+  690.                            // Post receives for incoming messages from masters.
+  691.                            // Store results in slave buffer.
+  692.                        //    vector<MPI_Request> request(nummstrpe);
+  693.                            MPI_Request* request = Memory::alloc<MPI_Request>(nummstrpe);
+  694.    1-----------------<     for (int mstrpe = 0; mstrpe < nummstrpe; ++mstrpe) {
+  695.    1                           int pe = mapmstrpepe[mstrpe];
+  696.    1                           int nslv = mstrpenumslv[mstrpe];
+  697.    1                           int slv1 = mapmstrpeslv1[mstrpe];
+  698.    1                           MPI_Irecv(&slvvar[slv1], nslv * type_size, MPI_BYTE,
+  699.    1                                   pe, tagmpi, MPI_COMM_WORLD,  &request[mstrpe]);
+  700.    1----------------->     }
+  701.                        
+  702.                            // Send updated slave data from proxy buffer back to slave PEs.
+  703.    1-----------------<     for (int slvpe = 0; slvpe < numslvpe; ++slvpe) {
+  704.    1                           int pe = mapslvpepe[slvpe];
+  705.    1                           int nprx = slvpenumprx[slvpe];
+  706.    1                           int prx1 = mapslvpeprx1[slvpe];
+  707.    1                           MPI_Send((void*)&prxvar[prx1], nprx * type_size, MPI_BYTE,
+  708.    1                                   pe, tagmpi, MPI_COMM_WORLD);
+  709.    1----------------->     }
+  710.                        
+  711.                            // Wait for all receives to complete.
+  712.                        //    vector<MPI_Status> status(nummstrpe);
+  713.                            MPI_Status* status = Memory::alloc<MPI_Status>(nummstrpe);
+  714.                            int ierr = MPI_Waitall(nummstrpe, &request[0], &status[0]);
+  715.                            if (ierr != 0) {
+  716.                                cerr << "Error: parallelScatter MPI error " << ierr <<
+  717.                                        " on PE " << Parallel::mype << endl;
+  718.                                cerr << "Exiting..." << endl;
+  719.                                exit(1);
+  720.                            }
+  721.                        
+  722.                            // Store slave data from buffer back to points.
+  723.    1-----------------<     for (int slv = 0; slv < numslv; ++slv) {
+  724.    1                           int p = mapslvp[slv];
+  725.    1                           pvar[p] = slvvar[slv];
+  726.    1----------------->     }
+  727.                        
+  728.                            Memory::free(slvvar);
+  729.                            Memory::free(request);
+  730.                            Memory::free(status);
+  731.                        #endif
+  732.                        }
+  733.                        
+  734.                        
+  735.                        template <typename T>
+  736.                        void Mesh::sumAcrossProcs(T* pvar) {
+  737.                            if (Parallel::numpe == 1) return;
+  738.                        //    std::vector<T> prxvar(numprx);
+  739.    I                       T* prxvar = Memory::alloc<T>(numprx);
+  740.  + r4 Ip------------<>     parallelGather(pvar, &prxvar[0]);
+  741.  + r4 I-------------<>     parallelSum(pvar, &prxvar[0]);
+  742.  + r4 Ip------------<>     parallelScatter(pvar, &prxvar[0]);
+  743.    I                       Memory::free(prxvar);
+  744.                        }
+  745.                        
+  746.                        
+  747.                        template <typename T>
+  748.                        void Mesh::sumOnProc(
+  749.                                const T* cvar,
+  750.                                T* pvar) {
+  751.                        
+  752.                            #pragma omp parallel for schedule(static)
+  753.    1-----------------<     for (int pch = 0; pch < numpch; ++pch) {
+  754.    1                           int pfirst = pchpfirst[pch];
+  755.    1                           int plast = pchplast[pch];
+  756.    1 2---------------<         for (int p = pfirst; p < plast; ++p) {
+  757.    1 2                             T x = T();
+  758.    1 2 3-------------<             for (int c = mappcfirst[p]; c >= 0; c = mapccnext[c]) {
+  759.    1 2 3                               x += cvar[c];
+  760.    1 2 3------------->             }
+  761.    1 2                             pvar[p] = x;
+  762.    1 2--------------->         }  // for p
+  763.    1----------------->     }  // for pch
+  764.                        
+  765.                        }
+  766.                        
+  767.                        
+  768.                        template <>
+  769.                        void Mesh::sumToPoints(
+  770.                                const double* cvar,
+  771.                                double* pvar) {
+  772.                        
+  773.  + Mm I-------------<>     sumOnProc(cvar, pvar);
+  774.                            if (Parallel::numpe > 1)
+  775.  +                             sumAcrossProcs(pvar);
+  776.                        
+  777.                        }
+  778.                        
+  779.                        
+  780.                        template <>
+  781.                        void Mesh::sumToPoints(
+  782.                                const double2* cvar,
+  783.                                double2* pvar) {
+  784.                        
+  785.  + Mm I-------------<>     sumOnProc(cvar, pvar);
+  786.                            if (Parallel::numpe > 1)
+  787.  +                             sumAcrossProcs(pvar);
+  788.                        
+  789.                        }
+  790.                        
+
+CC-6002 CC: SCALAR init, File = Mesh.cc, Line = 1 
+  A loop was eliminated by optimization.
+
+CC-6263 CC: VECTOR initEdges, File = Mesh.cc, Line = 1 
+  A loop was not vectorized because it contains a reference to a non-vector intrinsic on line 1.
+
+CC-6002 CC: SCALAR <unnamed>, File = Mesh.cc, Line = 1 
+  A loop was eliminated by optimization.
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny leaf routine "__normal_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:780) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:131) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "_Vector_base"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:258) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:99) was textually inlined.
+
+CC-6332 CC: VECTOR __copy_move_b<pointer, pointer>, File = stl_algobase.h, Line = 547 
+  A loop was not vectorized because it does not map well onto the target architecture.
+
+CC-6005 CC: SCALAR __copy_move_b<pointer, pointer>, File = stl_algobase.h, Line = 547 
+  A loop was unrolled 8 times.
+
+CC-6005 CC: SCALAR __fill_a<double2 *, double2>, File = stl_algobase.h, Line = 684 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR __fill_a<double2 *, double2>, File = stl_algobase.h, Line = 684 
+  A loop was not vectorized because a recurrence was found between "__value" and "__first" at line 685.
+
+CC-6005 CC: SCALAR __fill_a<double *, double>, File = stl_algobase.h, Line = 695 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR __fill_a<double *, double>, File = stl_algobase.h, Line = 695 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR fill<double2 *, double2>, File = stl_algobase.h, Line = 731 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR fill<double2 *, double2>, File = stl_algobase.h, Line = 731 
+  A loop was not vectorized because a recurrence was found between "__value" and "__first" at line 731.
+
+CC-6005 CC: SCALAR fill<double *, double>, File = stl_algobase.h, Line = 731 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR fill<double *, double>, File = stl_algobase.h, Line = 731 
+  A loop was vectorized.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 5969, Column = 18 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:95) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 5969, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6263 CC: VECTOR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was not vectorized because it contains a reference to a non-vector intrinsic on line 579.
+
+CC-6254 CC: VECTOR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was not vectorized because a recurrence was found on "__cur" at line 579.
+
+CC-3118 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:415) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny leaf routine "__normal_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:780) was textually inlined.
+
+CC-6254 CC: VECTOR vector, File = stl_vector.h, Line = 417 
+  A loop was not vectorized because a recurrence was found on "__cur" at line 417.
+
+CC-3001 CC: IPA <unnamed>, File = stl_vector.h, Line = 1640, Column = 18 
+  Tiny leaf routine "move_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1030) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:26) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:27) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "~double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:29) was textually inlined.
+
+CC-3001 CC: IPA operator+, File = Vec2.hh, Line = 109, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator-, File = Vec2.hh, Line = 115, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator*, File = Vec2.hh, Line = 127, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:27) was textually inlined.
+
+CC-3021 CC: IPA __sti___2efeb1ef_72405585, File = iostream, Line = 74, Column = 25 
+  "Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR __make_heap<iterator, _Iter_less_iter>, File = stl_heap.h, Line = 339 
+  A loop was not vectorized because a recurrence was found on "__first" at line 342.
+
+CC-6254 CC: VECTOR __make_heap<iterator, _Iter_less_iter>, File = stl_heap.h, Line = 342 
+  A loop was not vectorized because a recurrence was found on "__first" at line 342.
+
+CC-6290 CC: VECTOR __sort_heap<iterator, _Iter_less_iter>, File = stl_heap.h, Line = 405 
+  A loop was not vectorized because a recurrence was found between "__last" and "__first" at line 408.
+
+CC-6254 CC: VECTOR __sort_heap<iterator, _Iter_less_iter>, File = stl_heap.h, Line = 408 
+  A loop was not vectorized because a recurrence was found on "__first" at line 408.
+
+CC-6277 CC: VECTOR __find_if<iterator, _Iter_equals_val<const int>>, File = stl_algo.h, Line = 118 
+  A loop was not vectorized because the loop exit test is too complicated.
+
+CC-6290 CC: VECTOR __heap_select<iterator, _Iter_less_iter>, File = stl_algo.h, Line = 1673 
+  A loop was not vectorized because a recurrence was found between "__middle" and "__first" at line 1675.
+
+CC-6254 CC: VECTOR __heap_select<iterator, _Iter_less_iter>, File = stl_algo.h, Line = 1675 
+  A loop was not vectorized because a recurrence was found on "__first" at line 1675.
+
+CC-6290 CC: VECTOR __insertion_sort<iterator, _Iter_less_iter>, File = stl_algo.h, Line = 1845 
+  A loop was not vectorized because a recurrence was found between "__first" and "__i" at line 1855.
+
+CC-6005 CC: SCALAR __insertion_sort<iterator, _Iter_less_iter>, File = stl_algo.h, Line = 1851 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR __insertion_sort<iterator, _Iter_less_iter>, File = stl_algo.h, Line = 1851 
+  A loop was vectorized.
+
+CC-6290 CC: VECTOR __insertion_sort<iterator, _Iter_less_iter>, File = stl_algo.h, Line = 1855 
+  A loop was not vectorized because a recurrence was found between "__next" and "__i" at line 1855.
+
+CC-6290 CC: VECTOR __unguarded_insertion_sort<__normal_iterator<pointer, vector<pair<int, int>, allocator<pair<int, int>>>>,
+_Iter_less_iter>, File = stl_algo.h, Line = 1866 
+  A loop was not vectorized because a recurrence was found between "__first" and "__i" at line 1867.
+
+CC-6290 CC: VECTOR __unguarded_insertion_sort<__normal_iterator<pointer, vector<pair<int, int>, allocator<pair<int, int>>>>,
+_Iter_less_iter>, File = stl_algo.h, Line = 1867 
+  A loop was not vectorized because a recurrence was found between "__next" and "__i" at line 1867.
+
+CC-6290 CC: VECTOR __unguarded_partition<__normal_iterator<pointer, vector<pair<int, int>, allocator<pair<int, int>>>>,
+_Iter_less_iter>, File = stl_algo.h, Line = 1900 
+  A loop was not vectorized because a recurrence was found between "__first" and "__last" at line 1909.
+
+CC-6254 CC: VECTOR __unguarded_partition<__normal_iterator<pointer, vector<pair<int, int>, allocator<pair<int, int>>>>,
+_Iter_less_iter>, File = stl_algo.h, Line = 1902 
+  A loop was not vectorized because a recurrence was found on "__first" at line 1903.
+
+CC-6254 CC: VECTOR __unguarded_partition<__normal_iterator<pointer, vector<pair<int, int>, allocator<pair<int, int>>>>,
+_Iter_less_iter>, File = stl_algo.h, Line = 1905 
+  A loop was not vectorized because a recurrence was found on "__last" at line 1906.
+
+CC-6287 CC: VECTOR __introsort_loop<iterator, long, _Iter_less_iter>, File = stl_algo.h, Line = 1944 
+  A loop was not vectorized because it contains a call to function "T1
+  std::__unguarded_partition_pivot<__gnu_cxx::__normal_iterator<std::pair<int, int> *, std::vector<std::pair<int, int>,
+  std::allocator<std::pair<int, int>>>>, __gnu_cxx::__ops::_Iter_less_iter>" on line 1952.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 32, Column = 41 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 36, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 36, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 36, Column = 5 
+  "getInt" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 36, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 36, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 39, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 39, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 39, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 40, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  "getDoubleList" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:596) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 43, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 44, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA Mesh, File = Mesh.cc, Line = 44, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 46, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 46, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 47, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 50, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 50, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 50, Column = 5 
+  "getInt" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 50, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 50, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 51, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 51, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 51, Column = 5 
+  "getInt" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 51, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 51, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 53, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 53, Column = 5 
+  "GenMesh" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 54, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 54, Column = 5 
+  "WriteXY" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 55, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Mesh, File = Mesh.cc, Line = 55, Column = 5 
+  "ExportGold" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA Mesh, File = Mesh.cc, Line = 57, Column = 5 
+  "init"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:68) was not inlined because the call site will not flatten. 
+  "_ZSt20__throw_length_errorPKc" is missing.
+
+CC-3021 CC: IPA ~Mesh, File = Mesh.cc, Line = 62, Column = 5 
+  "~GenMesh" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 62, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:615) was textually inlined and flattened.
+
+CC-3021 CC: IPA ~Mesh, File = Mesh.cc, Line = 63, Column = 5 
+  "~WriteXY" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 63, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:615) was textually inlined and flattened.
+
+CC-3021 CC: IPA ~Mesh, File = Mesh.cc, Line = 64, Column = 5 
+  "~ExportGold" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 64, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:615) was textually inlined and flattened.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Mesh, File = Mesh.cc, Line = 65, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 71, Column = 21 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 72, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 72, Column = 28 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 72, Column = 38 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 73, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 73, Column = 31 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 73, Column = 48 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6263 CC: VECTOR initEdges, File = Mesh.cc, Line = 74 
+  A loop was not vectorized because it contains a reference to a non-vector intrinsic on line 74.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 74, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 74, Column = 31 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 74, Column = 48 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 74, Column = 48 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 74, Column = 48 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 74, Column = 48 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 74, Column = 48 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA init, File = Mesh.cc, Line = 75, Column = 5 
+  "generate" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 79, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 80, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 81, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 85, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 86, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 86, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 86, Column = 5 
+  Tiny routine "copy<iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-6290 CC: VECTOR init, File = Mesh.cc, Line = 90 
+  A loop was not vectorized because a recurrence was found between "cellnodes" and "this" at line 90.
+
+CC-6005 CC: SCALAR init, File = Mesh.cc, Line = 90 
+  A loop was unrolled 2 times.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 90, Column = 5 
+  Tiny routine "initSides"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:165) was textually inlined and flattened.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 92 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 92.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 92, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 93 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 93.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 93, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 94 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 94.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 94, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-3118 CC: IPA init, File = Mesh.cc, Line = 96, Column = 5 
+  "initEdges"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:194) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3118 CC: IPA init, File = Mesh.cc, Line = 99, Column = 5 
+  "initChunks"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:222) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA init, File = Mesh.cc, Line = 102, Column = 5 
+  "initInvMap"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:266) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3171 CC: IPA init, File = Mesh.cc, Line = 105, Column = 5 
+  "initParallel"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:291) was not inlined because it is not in the body of a
+  loop.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 108 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 108.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 108, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 109 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 109.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 109, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 110 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 110.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 110, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 111 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 111.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 111, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 112 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 112.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 112, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6254 CC: VECTOR init, File = Mesh.cc, Line = 113 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 113.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 113, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 116, Column = 5 
+  Tiny routine "writeStats"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:333) was textually inlined.  NOT INLINED: 
+  globalSum : globalSum : operator<<<char_traits<char>> : operator<< : operator<< : operator<< : operator<< : operator<< :
+  operator<< : operator<< : operator<<.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 119, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 120, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 121, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 122, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 123, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 124, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 125, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 126, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 127, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 128, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 129, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 130, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 131, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 132, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 133, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 134, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 135, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 136, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 137, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 138, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6290 CC: VECTOR init, File = Mesh.cc, Line = 142 
+  A loop was not vectorized because a recurrence was found between "nodepos" and "this" at line 147.
+
+CC-6823 CC: THREAD init, File = Mesh.cc, Line = 142 
+  A region starting at line 142 and ending at line 149 was multi-threaded.
+
+CC-6817 CC: THREAD init, File = Mesh.cc, Line = 142 
+  A loop was partitioned.
+
+CC-3182 CC: IPA init, File = Mesh.cc, Line = 142, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 143, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 144, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR init, File = Mesh.cc, Line = 146 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR init, File = Mesh.cc, Line = 146 
+  A loop was not vectorized because a recurrence was found between "nodepos" and "this" at line 147.
+
+CC-3182 CC: IPA init, File = Mesh.cc, Line = 146, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 147, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 147, Column = 13 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:31) was textually inlined.
+
+CC-6263 CC: VECTOR init, File = Mesh.cc, Line = 153 
+  A loop was not vectorized because it contains a reference to a non-vector intrinsic on line 157.
+
+CC-6823 CC: THREAD init, File = Mesh.cc, Line = 153 
+  A region starting at line 153 and ending at line 159 was multi-threaded.
+
+CC-6817 CC: THREAD init, File = Mesh.cc, Line = 153 
+  A loop was partitioned.
+
+CC-3182 CC: IPA init, File = Mesh.cc, Line = 153, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 154, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 155, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR init, File = Mesh.cc, Line = 156 
+  A loop was unrolled 2 times.
+
+CC-6209 CC: VECTOR init, File = Mesh.cc, Line = 156 
+  A loop was partially vectorized.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 156, Column = 9 
+  Tiny routine "calcCtrs"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:445) was textually inlined and flattened.
+
+CC-6005 CC: SCALAR init, File = Mesh.cc, Line = 157 
+  A loop was unrolled 4 times.
+
+CC-6209 CC: VECTOR init, File = Mesh.cc, Line = 157 
+  A loop was partially vectorized.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 157, Column = 9 
+  Tiny routine "calcVols"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:472) was textually inlined and flattened.
+
+CC-6005 CC: SCALAR init, File = Mesh.cc, Line = 158 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR init, File = Mesh.cc, Line = 158 
+  A loop was vectorized.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 158, Column = 9 
+  Tiny leaf routine "calcSideFracs"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:527) was textually inlined.
+
+CC-3001 CC: IPA init, File = Mesh.cc, Line = 160, Column = 5 
+  Tiny routine "checkBadSides"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:515) was textually inlined.  NOT INLINED: 
+  operator<<<char_traits<char>> : operator<< : operator<< : operator<< : exit.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 170, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 171, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 172, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 173, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 174, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6290 CC: VECTOR initSides, File = Mesh.cc, Line = 176 
+  A loop was not vectorized because a recurrence was found between "cellnodes" and "this" at line 184.
+
+CC-3182 CC: IPA initSides, File = Mesh.cc, Line = 176, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 177, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:948) was textually inlined.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 178, Column = 18 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:948) was textually inlined.
+
+CC-6005 CC: SCALAR initSides, File = Mesh.cc, Line = 179 
+  A loop was unrolled 2 times.
+
+CC-6290 CC: VECTOR initSides, File = Mesh.cc, Line = 179 
+  A loop was not vectorized because a recurrence was found between "cellnodes" and "this" at line 184.
+
+CC-3182 CC: IPA initSides, File = Mesh.cc, Line = 179, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 184, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:948) was textually inlined.
+
+CC-3001 CC: IPA initSides, File = Mesh.cc, Line = 185, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:948) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 196, Column = 26 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:131) was textually inlined.
+
+CC-3118 CC: IPA initEdges, File = Mesh.cc, Line = 196, Column = 26 
+  "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:415) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 196, Column = 26 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 196, Column = 40 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:131) was textually inlined.
+
+CC-3118 CC: IPA initEdges, File = Mesh.cc, Line = 196, Column = 40 
+  "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:415) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 196, Column = 40 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 198, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6287 CC: VECTOR initEdges, File = Mesh.cc, Line = 201 
+  A loop was not vectorized because it contains a call to function "T1 std::find<__gnu_cxx::__normal_iterator<int *,
+  std::vector<int, std::allocator<int>>>, int>" on line 207.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 202, Column = 16 
+  Tiny leaf routine "min<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:195) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 203, Column = 16 
+  Tiny leaf routine "max<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:219) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 205, Column = 26 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 206, Column = 26 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 207, Column = 15 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 207, Column = 15 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:716) was textually inlined and flattened.
+
+CC-3172 CC: IPA initEdges, File = Mesh.cc, Line = 207, Column = 15 
+  "find<iterator, int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:3897) was not inlined because the enclosing loop body
+  did not completely flatten.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 207, Column = 15 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 207, Column = 15 
+  Tiny routine "operator-<pointer, vector<int, allocator<int>>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:963) was
+  textually inlined and flattened.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 208, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA initEdges, File = Mesh.cc, Line = 210, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA initEdges, File = Mesh.cc, Line = 211, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA initEdges, File = Mesh.cc, Line = 214, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 224, Column = 25 
+  Tiny leaf routine "max<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:219) was textually inlined.
+
+CC-6287 CC: VECTOR initChunks, File = Mesh.cc, Line = 231 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 236.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 233, Column = 9 
+  Tiny leaf routine "min<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:195) was textually inlined.
+
+CC-6254 CC: VECTOR initChunks, File = Mesh.cc, Line = 234 
+  A loop was not vectorized because a recurrence was found on "s2" at line 235.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 236, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 237, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 238, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 239, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1090) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 241, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR initChunks, File = Mesh.cc, Line = 245 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 248.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 247, Column = 9 
+  Tiny leaf routine "min<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:195) was textually inlined.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 248, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 249, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 251, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 254, Column = 13 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 254, Column = 13 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-6287 CC: VECTOR initChunks, File = Mesh.cc, Line = 255 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 258.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 257, Column = 9 
+  Tiny leaf routine "min<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:195) was textually inlined.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 258, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA initChunks, File = Mesh.cc, Line = 259, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA initChunks, File = Mesh.cc, Line = 261, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 267, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 268, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6254 CC: VECTOR initInvMap, File = Mesh.cc, Line = 270 
+  A loop was not vectorized because a recurrence was found on "__cur" at line 270.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 270, Column = 29 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:131) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 270, Column = 29 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 270, Column = 29 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:139) was textually inlined.
+
+CC-6289 CC: VECTOR initInvMap, File = Mesh.cc, Line = 271 
+  A loop was not vectorized because a recurrence was found on "c" between lines 272 and 271.
+
+CC-3182 CC: IPA initInvMap, File = Mesh.cc, Line = 271, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 272, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 272, Column = 9 
+  Tiny routine "make_pair<int &, int &>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:519) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 272, Column = 9 
+  Tiny routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:384) was textually inlined and flattened.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 273, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 273, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:716) was textually inlined and flattened.
+
+CC-3118 CC: IPA initInvMap, File = Mesh.cc, Line = 273, Column = 5 
+  "sort<iterator>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:4824) was not inlined because the call site will not
+  flatten. 
+  "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPSt4pairIiiESt6vectorIS3_SaIS3_EEEElNS0_5__ops15_Iter_less_iterEEvT_SB_T0_T
+  _" is missing.
+
+CC-6254 CC: VECTOR initInvMap, File = Mesh.cc, Line = 274 
+  A loop was not vectorized because a recurrence was found on "this" at line 281.
+
+CC-3182 CC: IPA initInvMap, File = Mesh.cc, Line = 274, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 275, Column = 15 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 276, Column = 16 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 277, Column = 16 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 278, Column = 15 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initInvMap, File = Mesh.cc, Line = 279, Column = 16 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 300, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 301, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 302, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 302, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 302, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 303, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 304, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 304, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 304, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 305, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6289 CC: VECTOR initParallel, File = Mesh.cc, Line = 307 
+  A loop was not vectorized because a recurrence was found on "this" between lines 308 and 309.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 311, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 312, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 313, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 313, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 313, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 315, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 316, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 317, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 317, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 317, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 318, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 319, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 319, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 319, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 320, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6289 CC: VECTOR initParallel, File = Mesh.cc, Line = 322 
+  A loop was not vectorized because a recurrence was found on "this" between lines 323 and 324.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 326, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 327, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 328, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 328, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA initParallel, File = Mesh.cc, Line = 328, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA getXPlane, File = Mesh.cc, Line = 344, Column = 9 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 346, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 347, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 348, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 349, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 350, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 351, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 352, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 356, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 356, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 357, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 357, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 357, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 358, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 358, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 358, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 359, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 359, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 359, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 360, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 360, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 360, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 361, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 361, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 361, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 362, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 362, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 362, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 363, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 363, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 363, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 364, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 364, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 364, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 365, Column = 5 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeStats, File = Mesh.cc, Line = 365, Column = 5 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = Mesh.cc, Line = 380, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = Mesh.cc, Line = 380, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = Mesh.cc, Line = 381, Column = 9 
+  "write" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = Mesh.cc, Line = 385, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = Mesh.cc, Line = 385, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA write, File = Mesh.cc, Line = 386, Column = 9 
+  "write" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA getXPlane, File = Mesh.cc, Line = 394, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA getYPlane, File = Mesh.cc, Line = 395, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6287 CC: VECTOR getXPlane, File = Mesh.cc, Line = 397 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 399.
+
+CC-3118 CC: IPA getXPlane, File = Mesh.cc, Line = 399, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA getYPlane, File = Mesh.cc, Line = 409, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6287 CC: VECTOR getYPlane, File = Mesh.cc, Line = 412 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 414.
+
+CC-3118 CC: IPA getYPlane, File = Mesh.cc, Line = 414, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6002 CC: SCALAR getPlaneChunks, File = Mesh.cc, Line = 428 
+  A loop was eliminated by optimization.
+
+CC-3001 CC: IPA getPlaneChunks, File = Mesh.cc, Line = 428, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6002 CC: SCALAR getPlaneChunks, File = Mesh.cc, Line = 429 
+  A loop was eliminated by optimization.
+
+CC-3001 CC: IPA getPlaneChunks, File = Mesh.cc, Line = 429, Column = 5 
+  Routine "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:824) was textually inlined because argument 2 is a
+  constant.  NOT INLINED:  __throw_length_error : __throw_bad_alloc : operator new.
+
+CC-6287 CC: VECTOR getPlaneChunks, File = Mesh.cc, Line = 434 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 438.
+
+CC-3001 CC: IPA getPlaneChunks, File = Mesh.cc, Line = 435, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:930) was textually inlined.
+
+CC-6254 CC: VECTOR getPlaneChunks, File = Mesh.cc, Line = 437 
+  A loop was not vectorized because a recurrence was found on "__len" at line 437.
+
+CC-3001 CC: IPA getPlaneChunks, File = Mesh.cc, Line = 437, Column = 10 
+  Tiny routine "lower_bound<const int *, int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:984) was textually inlined and
+  flattened.
+
+CC-3118 CC: IPA getPlaneChunks, File = Mesh.cc, Line = 438, Column = 10 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA getPlaneChunks, File = Mesh.cc, Line = 439, Column = 10 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:1074) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6005 CC: SCALAR calcCtrs, File = Mesh.cc, Line = 454 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcCtrs, File = Mesh.cc, Line = 454 
+  A loop was vectorized.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 454, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:27) was textually inlined.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 454, Column = 5 
+  Tiny routine "fill<double2 *, double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR calcCtrs, File = Mesh.cc, Line = 456 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR calcCtrs, File = Mesh.cc, Line = 456 
+  A loop was not vectorized because a recurrence was found between "px" and "zx" at line 462.
+
+CC-3182 CC: IPA calcCtrs, File = Mesh.cc, Line = 456, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 461, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 461, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 461, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:31) was textually inlined.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 462, Column = 9 
+  Tiny leaf routine "operator+="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:38) was textually inlined.
+
+CC-6005 CC: SCALAR calcCtrs, File = Mesh.cc, Line = 465 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcCtrs, File = Mesh.cc, Line = 465 
+  A loop was vectorized.
+
+CC-3182 CC: IPA calcCtrs, File = Mesh.cc, Line = 465, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcCtrs, File = Mesh.cc, Line = 466, Column = 9 
+  Tiny leaf routine "operator/="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:59) was textually inlined.
+
+CC-6005 CC: SCALAR calcVols, File = Mesh.cc, Line = 484 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcVols, File = Mesh.cc, Line = 484 
+  A loop was vectorized.
+
+CC-3001 CC: IPA calcVols, File = Mesh.cc, Line = 484, Column = 5 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR calcVols, File = Mesh.cc, Line = 485 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcVols, File = Mesh.cc, Line = 485 
+  A loop was vectorized.
+
+CC-3001 CC: IPA calcVols, File = Mesh.cc, Line = 485, Column = 5 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:724) was textually inlined and
+  flattened.
+
+CC-6290 CC: VECTOR calcVols, File = Mesh.cc, Line = 489 
+  A loop was not vectorized because a recurrence was found between "px" and "sarea" at line 497.
+
+CC-3182 CC: IPA calcVols, File = Mesh.cc, Line = 489, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcVols, File = Mesh.cc, Line = 495, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcVols, File = Mesh.cc, Line = 495, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcVols, File = Mesh.cc, Line = 495, Column = 16 
+  Tiny leaf routine "cross"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:147) was textually inlined.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 519, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 519, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 519, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 519, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 520, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 520, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA checkBadSides, File = Mesh.cc, Line = 521, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR calcSideFracs, File = Mesh.cc, Line = 535 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcSideFracs, File = Mesh.cc, Line = 535 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR calcSurfVecs, File = Mesh.cc, Line = 550 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcSurfVecs, File = Mesh.cc, Line = 550 
+  A loop was vectorized.
+
+CC-3182 CC: IPA calcSurfVecs, File = Mesh.cc, Line = 550, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcSurfVecs, File = Mesh.cc, Line = 554, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcSurfVecs, File = Mesh.cc, Line = 554, Column = 9 
+  Tiny routine "rotateCCW"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:165) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcSurfVecs, File = Mesh.cc, Line = 554, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:31) was textually inlined.
+
+CC-6005 CC: SCALAR calcEdgeLen, File = Mesh.cc, Line = 567 
+  A loop was unrolled 2 times.
+
+CC-6290 CC: VECTOR calcEdgeLen, File = Mesh.cc, Line = 567 
+  A loop was not vectorized because a recurrence was found between "px" and "elen" at line 572.
+
+CC-3182 CC: IPA calcEdgeLen, File = Mesh.cc, Line = 567, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcEdgeLen, File = Mesh.cc, Line = 572, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcEdgeLen, File = Mesh.cc, Line = 572, Column = 9 
+  Tiny leaf routine "length"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:153) was textually inlined.
+
+CC-6005 CC: SCALAR calcCharLen, File = Mesh.cc, Line = 586 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcCharLen, File = Mesh.cc, Line = 586 
+  A loop was vectorized.
+
+CC-3001 CC: IPA calcCharLen, File = Mesh.cc, Line = 586, Column = 5 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR calcCharLen, File = Mesh.cc, Line = 588 
+  A loop was unrolled 2 times.
+
+CC-6291 CC: VECTOR calcCharLen, File = Mesh.cc, Line = 588 
+  A loop was not vectorized because a recurrence was found between "sarea" at line 592 and "zdl" at line 596.
+
+CC-3182 CC: IPA calcCharLen, File = Mesh.cc, Line = 588, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcCharLen, File = Mesh.cc, Line = 596, Column = 9 
+  Tiny leaf routine "min<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:195) was textually inlined.
+
+CC-3001 CC: IPA sumAcrossProcs<double>, File = Mesh.cc, Line = 739, Column = 15 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-3001 CC: IPA sumAcrossProcs<double2>, File = Mesh.cc, Line = 739, Column = 15 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:30) was textually inlined.
+
+CC-6287 CC: VECTOR sumAcrossProcs<double>, File = Mesh.cc, Line = 740 
+  A loop was not vectorized because it contains a call to function "MPI_Irecv" on line 740.
+
+CC-6005 CC: SCALAR sumAcrossProcs<double>, File = Mesh.cc, Line = 740 
+  A loop was unrolled 4 times.
+
+CC-6287 CC: VECTOR sumAcrossProcs<double2>, File = Mesh.cc, Line = 740 
+  A loop was not vectorized because it contains a call to function "MPI_Irecv" on line 740.
+
+CC-6005 CC: SCALAR sumAcrossProcs<double2>, File = Mesh.cc, Line = 740 
+  A loop was unrolled 4 times.
+
+CC-3001 CC: IPA sumAcrossProcs<double>, File = Mesh.cc, Line = 740, Column = 5 
+  Tiny routine "parallelGather<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:602) was textually inlined.  NOT
+  INLINED:  MPI_Irecv : MPI_Send : MPI_Waitall : operator<<<char_traits<char>> : operator<< : operator<< : operator<< : operator<<
+  : exit.
+
+CC-3001 CC: IPA sumAcrossProcs<double2>, File = Mesh.cc, Line = 740, Column = 5 
+  Tiny routine "parallelGather<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:602) was textually inlined.  NOT
+  INLINED:  MPI_Irecv : MPI_Send : MPI_Waitall : operator<<<char_traits<char>> : operator<< : operator<< : operator<< : operator<<
+  : exit.
+
+CC-6005 CC: SCALAR sumAcrossProcs<double>, File = Mesh.cc, Line = 741 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR sumAcrossProcs<double>, File = Mesh.cc, Line = 741 
+  A loop was not vectorized because a recurrence was found between "prxvar" and "pvar" at line 741.
+
+CC-6005 CC: SCALAR sumAcrossProcs<double2>, File = Mesh.cc, Line = 741 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR sumAcrossProcs<double2>, File = Mesh.cc, Line = 741 
+  A loop was not vectorized because a recurrence was found between "prxvar" and "pvar" at line 741.
+
+CC-3001 CC: IPA sumAcrossProcs<double>, File = Mesh.cc, Line = 741, Column = 5 
+  Tiny leaf routine "parallelSum<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:658) was textually inlined.
+
+CC-3001 CC: IPA sumAcrossProcs<double2>, File = Mesh.cc, Line = 741, Column = 5 
+  Tiny routine "parallelSum<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:658) was textually inlined and
+  flattened.
+
+CC-6287 CC: VECTOR sumAcrossProcs<double>, File = Mesh.cc, Line = 742 
+  A loop was not vectorized because it contains a call to function "MPI_Irecv" on line 742.
+
+CC-6005 CC: SCALAR sumAcrossProcs<double>, File = Mesh.cc, Line = 742 
+  A loop was unrolled 4 times.
+
+CC-6287 CC: VECTOR sumAcrossProcs<double2>, File = Mesh.cc, Line = 742 
+  A loop was not vectorized because it contains a call to function "MPI_Irecv" on line 742.
+
+CC-6005 CC: SCALAR sumAcrossProcs<double2>, File = Mesh.cc, Line = 742 
+  A loop was unrolled 4 times.
+
+CC-3001 CC: IPA sumAcrossProcs<double>, File = Mesh.cc, Line = 742, Column = 5 
+  Tiny routine "parallelScatter<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:679) was textually inlined.  NOT
+  INLINED:  MPI_Irecv : MPI_Send : MPI_Waitall : operator<<<char_traits<char>> : operator<< : operator<< : operator<< : operator<<
+  : exit.
+
+CC-3001 CC: IPA sumAcrossProcs<double2>, File = Mesh.cc, Line = 742, Column = 5 
+  Tiny routine "parallelScatter<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:679) was textually inlined.  NOT
+  INLINED:  MPI_Irecv : MPI_Send : MPI_Waitall : operator<<<char_traits<char>> : operator<< : operator<< : operator<< : operator<<
+  : exit.
+
+CC-3001 CC: IPA sumAcrossProcs<double>, File = Mesh.cc, Line = 743, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:39) was textually inlined.
+
+CC-3001 CC: IPA sumAcrossProcs<double2>, File = Mesh.cc, Line = 743, Column = 5 
+  Tiny leaf routine "free<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:39) was textually inlined.
+
+CC-6290 CC: VECTOR sumToPoints<double>, File = Mesh.cc, Line = 773 
+  A loop was not vectorized because a recurrence was found between "cvar" and "pvar" at line 773.
+
+CC-6823 CC: THREAD sumToPoints<double>, File = Mesh.cc, Line = 773 
+  A region starting at line 773 and ending at line 773 was multi-threaded.
+
+CC-6817 CC: THREAD sumToPoints<double>, File = Mesh.cc, Line = 773 
+  A loop was partitioned.
+
+CC-3001 CC: IPA sumToPoints<double>, File = Mesh.cc, Line = 773, Column = 5 
+  Tiny routine "sumOnProc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:748) was textually inlined and flattened.
+
+CC-3118 CC: IPA sumToPoints<double>, File = Mesh.cc, Line = 775, Column = 9 
+  "sumAcrossProcs<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:736) was not inlined because the call site will
+  not flatten.  "exit" is missing.
+
+CC-6254 CC: VECTOR sumToPoints<double2>, File = Mesh.cc, Line = 785 
+  A loop was not vectorized because a recurrence was found on "x" at line 785.
+
+CC-6823 CC: THREAD sumToPoints<double2>, File = Mesh.cc, Line = 785 
+  A region starting at line 785 and ending at line 785 was multi-threaded.
+
+CC-6817 CC: THREAD sumToPoints<double2>, File = Mesh.cc, Line = 785 
+  A loop was partitioned.
+
+CC-3001 CC: IPA sumToPoints<double2>, File = Mesh.cc, Line = 785, Column = 5 
+  Tiny routine "sumOnProc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:748) was textually inlined and flattened.
+
+CC-3118 CC: IPA sumToPoints<double2>, File = Mesh.cc, Line = 787, Column = 9 
+  "sumAcrossProcs<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Mesh.cc:736) was not inlined because the call site will
+  not flatten.  "exit" is missing.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

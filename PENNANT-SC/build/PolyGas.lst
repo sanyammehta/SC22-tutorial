@@ -1,0 +1,273 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/PolyGas.o src/PolyGas.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc
+Date     : 06/04/2020  18:09:47
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.               /*
+    2.                * PolyGas.cc
+    3.                *
+    4.                *  Created on: Mar 26, 2012
+    5.                *      Author: cferenba
+    6.                *
+    7.                * Copyright (c) 2012, Triad National Security, LLC.
+    8.                * All rights reserved.
+    9.                * Use of this source code is governed by a BSD-style open-source
+   10.                * license; see top-level LICENSE file for full license text.
+   11.                */
+   12.               
+   13.               #include "PolyGas.hh"
+   14.               
+   15.               #include "Memory.hh"
+   16.               #include "InputFile.hh"
+   17.               #include "Hydro.hh"
+   18.               #include "Mesh.hh"
+   19.               
+   20.               using namespace std;
+   21.               
+   22.               
+   23.               PolyGas::PolyGas(const InputFile* inp, Hydro* h) : hydro(h) {
+   24.  +                gamma = inp->getDouble("gamma", 5. / 3.);
+   25.  +                ssmin = inp->getDouble("ssmin", 0.);
+   26.               
+   27.               }
+   28.               
+   29.               
+   30.               void PolyGas::calcStateAtHalf(
+   31.                       const double* zr0,
+   32.                       const double* zvolp,
+   33.                       const double* zvol0,
+   34.                       const double* ze,
+   35.                       const double* zwrate,
+   36.                       const double* zm,
+   37.                       const double dt,
+   38.                       double* zp,
+   39.                       double* zss,
+   40.                       const int zfirst,
+   41.                       const int zlast) {
+   42.               
+   43.    I              double* z0per = Memory::alloc<double>(zlast - zfirst);
+   44.               
+   45.                   const double dth = 0.5 * dt;
+   46.               
+   47.                   // compute EOS at beginning of time step
+   48.  + r8 I----<>     calcEOS(zr0, ze, zp, z0per, zss, zfirst, zlast);
+   49.               
+   50.                   // now advance pressure to the half-step
+   51.                   #pragma ivdep
+   52.    Vr4------<     for (int z = zfirst; z < zlast; ++z) {
+   53.    Vr4                int z0 = z - zfirst;
+   54.    Vr4                double zminv = 1. / zm[z];
+   55.    Vr4                double dv = (zvolp[z] - zvol0[z]) * zminv;
+   56.    Vr4                double bulk = zr0[z] * zss[z] * zss[z];
+   57.    Vr4                double denom = 1. + 0.5 * z0per[z0] * dv;
+   58.    Vr4                double src = zwrate[z] * dth * zminv;
+   59.    Vr4                zp[z] += (z0per[z0] * src - zr0[z] * bulk * dv) / denom;
+   60.    Vr4------>     }
+   61.               
+   62.    I              Memory::free(z0per);
+   63.               }
+   64.               
+   65.               
+   66.               void PolyGas::calcEOS(
+   67.                       const double* zr,
+   68.                       const double* ze,
+   69.                       double* zp,
+   70.                       double* z0per,
+   71.                       double* zss,
+   72.                       const int zfirst,
+   73.                       const int zlast) {
+   74.               
+   75.                   const double gm1 = gamma - 1.;
+   76.    I              const double ss2 = max(ssmin * ssmin, 1.e-99);
+   77.               
+   78.                   #pragma ivdep
+   79.  + VFr4-----<     for (int z = zfirst; z < zlast; ++z) {
+   80.    VFr4               int z0 = z - zfirst;
+   81.    VFr4               double rx = zr[z];
+   82.    VFr4 I             double ex = max(ze[z], 0.0);
+   83.    VFr4               double px = gm1 * rx * ex;
+   84.    VFr4               double prex = gm1 * ex;
+   85.    VFr4               double perx = gm1 * rx;
+   86.    VFr4 I             double csqd = max(ss2, prex + perx * px / (rx * rx));
+   87.    VFr4               zp[z] = px;
+   88.    VFr4               z0per[z0] = perx;
+   89.    VFr4               zss[z] = sqrt(csqd);
+   90.    VFr4----->     }
+   91.               
+   92.               }
+   93.               
+   94.               
+   95.               void PolyGas::calcForce(
+   96.                       const double* zp,
+   97.                       const double2* ssurfp,
+   98.                       double2* sf,
+   99.                       const int sfirst,
+  100.                       const int slast) {
+  101.               
+  102.                   const Mesh* mesh = hydro->mesh;
+  103.               
+  104.                   #pragma ivdep
+  105.  + VFr2-----<     for (int s = sfirst; s < slast; ++s) {
+  106.    VFr2               int z = mesh->mapsz[s];
+  107.    VFr2 I             double2 sfx = -zp[z] * ssurfp[s];
+  108.    VFr2 I             sf[s] = sfx;
+  109.    VFr2       
+  110.    VFr2----->     }
+  111.               }
+  112.               
+  113.               
+  114.               
+  115.               
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 24, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 24, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 24, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 24, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 24, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 25, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 25, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 25, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 25, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA PolyGas, File = PolyGas.cc, Line = 25, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA calcStateAtHalf, File = PolyGas.cc, Line = 43, Column = 19 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:30) was textually inlined.
+
+CC-6273 CC: VECTOR calcStateAtHalf, File = PolyGas.cc, Line = 48 
+  A loop was not vectorized because the address of a variable is taken in a manner that is too complex.
+
+CC-6005 CC: SCALAR calcStateAtHalf, File = PolyGas.cc, Line = 48 
+  A loop was unrolled 8 times.
+
+CC-3001 CC: IPA calcStateAtHalf, File = PolyGas.cc, Line = 48, Column = 5 
+  Tiny routine "calcEOS"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:66) was textually inlined and flattened.
+
+CC-6005 CC: SCALAR calcStateAtHalf, File = PolyGas.cc, Line = 52 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcStateAtHalf, File = PolyGas.cc, Line = 52 
+  A loop was vectorized.
+
+CC-3001 CC: IPA calcStateAtHalf, File = PolyGas.cc, Line = 62, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:39) was textually inlined.
+
+CC-3001 CC: IPA calcEOS, File = PolyGas.cc, Line = 76, Column = 22 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:219) was textually inlined.
+
+CC-6005 CC: SCALAR calcEOS, File = PolyGas.cc, Line = 79 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcEOS, File = PolyGas.cc, Line = 79 
+  A loop was vectorized.
+
+CC-3182 CC: IPA calcEOS, File = PolyGas.cc, Line = 79, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcEOS, File = PolyGas.cc, Line = 82, Column = 19 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:219) was textually inlined.
+
+CC-3001 CC: IPA calcEOS, File = PolyGas.cc, Line = 86, Column = 21 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:219) was textually inlined.
+
+CC-6005 CC: SCALAR calcForce, File = PolyGas.cc, Line = 105 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcForce, File = PolyGas.cc, Line = 105 
+  A loop was vectorized.
+
+CC-3182 CC: IPA calcForce, File = PolyGas.cc, Line = 105, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcForce, File = PolyGas.cc, Line = 107, Column = 17 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcForce, File = PolyGas.cc, Line = 108, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/PolyGas.cc:31) was textually inlined.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

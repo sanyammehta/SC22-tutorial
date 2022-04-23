@@ -1,0 +1,910 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/QCS.o src/QCS.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc
+Date     : 06/04/2020  18:09:47
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.               /*
+    2.                * QCS.cc
+    3.                *
+    4.                *  Created on: Feb 21, 2012
+    5.                *      Author: cferenba
+    6.                *
+    7.                * Copyright (c) 2012, Triad National Security, LLC.
+    8.                * All rights reserved.
+    9.                * Use of this source code is governed by a BSD-style open-source
+   10.                * license; see top-level LICENSE file for full license text.
+   11.                */
+   12.               
+   13.               #include "QCS.hh"
+   14.               
+   15.               #include <cmath>
+   16.               #include "Memory.hh"
+   17.               #include "InputFile.hh"
+   18.               #include "Vec2.hh"
+   19.               #include "Mesh.hh"
+   20.               #include "Hydro.hh"
+   21.               
+   22.               using namespace std;
+   23.               
+   24.               
+   25.               QCS::QCS(const InputFile* inp, Hydro* h) : hydro(h) {
+   26.  +                qgamma = inp->getDouble("qgamma", 5. / 3.);
+   27.  +                q1 = inp->getDouble("q1", 0.);
+   28.  +                q2 = inp->getDouble("q2", 2.);
+   29.               
+   30.               }
+   31.               
+   32.               QCS::~QCS() {}
+   33.               
+   34.               
+   35.               void QCS::calcForce(
+   36.                       double2* sf,
+   37.                       const int sfirst,
+   38.                       const int slast) {
+   39.                   int cfirst = sfirst;
+   40.                   int clast = slast;
+   41.               
+   42.                   // declare temporary variables
+   43.    I              double* c0area = Memory::alloc<double>(clast - cfirst);
+   44.    I              double* c0evol = Memory::alloc<double>(clast - cfirst);
+   45.    I              double* c0du = Memory::alloc<double>(clast - cfirst);
+   46.    I              double* c0div = Memory::alloc<double>(clast - cfirst);
+   47.    I              double* c0cos = Memory::alloc<double>(clast - cfirst);
+   48.    I              double2* c0qe = Memory::alloc<double2>(2 * (clast - cfirst));
+   49.               
+   50.                   // [1] Find the right, left, top, bottom  edges to use for the
+   51.                   //     limiters
+   52.                   // *** NOT IMPLEMENTED IN PENNANT ***
+   53.               
+   54.                   // [2] Compute corner divergence and related quantities
+   55.                   // [2.1] Find the corner divergence
+   56.                   // [2.2] Compute the cos angle for c
+   57.                   // [2.3] Find the evolution factor c0evol(c) and the Delta u(c) = du(c)
+   58.                   // [2.4] Find the weights c0w(c)
+   59.  +                setCornerDiv(c0area, c0div, c0evol, c0du, c0cos, sfirst, slast);
+   60.               
+   61.                   // [3] Find the limiters Psi(c)
+   62.                   // *** NOT IMPLEMENTED IN PENNANT ***
+   63.               
+   64.                   // [4] Compute the Q vector (corner based)
+   65.                   // [4.1] Compute cmu = (1-psi) . crho . zKUR . c0evol
+   66.                   // [4.2] Compute the q vector associated with c on edges
+   67.                   //       e1=[n0,n1], e2=[n1,n2]
+   68.                   //       c0qe(2,c) = cmu(c).( u(n2)-u(n1) ) / l_{n1->n2}
+   69.                   //       c0qe(1,c) = cmu(c).( u(n1)-u(n0) ) / l_{n0->n1}
+   70.  +                setQCnForce(c0div, c0du, c0evol, c0qe, sfirst, slast);
+   71.               
+   72.                   // [5] Compute the Q forces
+   73.  +                setForce(c0area, c0qe, c0cos, sf, sfirst, slast);
+   74.               
+   75.                   // [6] Set velocity difference to use to compute timestep
+   76.  +                setVelDiff(sfirst, slast);
+   77.               
+   78.    I              Memory::free(c0area);
+   79.    I              Memory::free(c0evol);
+   80.    I              Memory::free(c0du);
+   81.    I              Memory::free(c0div);
+   82.    I              Memory::free(c0cos);
+   83.    I              Memory::free(c0qe);
+   84.               }
+   85.               
+   86.               
+   87.               // Routine number [2]  in the full algorithm
+   88.               //     [2.1] Find the corner divergence
+   89.               //     [2.2] Compute the cos angle for c
+   90.               //     [2.3] Find the evolution factor c0evol(c)
+   91.               //           and the Delta u(c) = du(c)
+   92.               void QCS::setCornerDiv(
+   93.                           double* c0area,
+   94.                           double* c0div,
+   95.                           double* c0evol,
+   96.                           double* c0du,
+   97.                           double* c0cos,
+   98.                           const int sfirst,
+   99.                           const int slast) {
+  100.               
+  101.                   const Mesh* mesh = hydro->mesh;
+  102.                   const int nums = mesh->nums;
+  103.                   const int numz = mesh->numz;
+  104.               
+  105.                   const double2* pu = hydro->pu;
+  106.                   const double2* px = mesh->pxp;
+  107.                   const double2* ex = mesh->exp;
+  108.                   const double2* zx = mesh->zxp;
+  109.                   const double* elen = mesh->elen;
+  110.                   const int* znump = mesh->znump;
+  111.               
+  112.                   int cfirst = sfirst;
+  113.                   int clast = slast;
+  114.                   int zfirst = mesh->mapsz[sfirst];
+  115.                   int zlast = (slast < nums ? mesh->mapsz[slast] : numz);
+  116.               
+  117.    I              double2* z0uc = Memory::alloc<double2>(zlast - zfirst);
+  118.    I              double2 up0, up1, up2, up3;
+  119.    I              double2 xp0, xp1, xp2, xp3;
+  120.               
+  121.                   // [1] Compute a zone-centered velocity
+  122.    Vr2 I---<>     fill(&z0uc[0], &z0uc[zlast-zfirst], double2(0., 0.));
+  123.  + Fr4------<     for (int c = cfirst; c < clast; ++c) {
+  124.    Fr4                int p = mesh->mapsp1[c];
+  125.    Fr4                int z = mesh->mapsz[c];
+  126.    Fr4                int z0 = z - zfirst;
+  127.    Fr4 I              z0uc[z0] += pu[p];
+  128.    Fr4------>     }
+  129.               
+  130.  + VFr2-----<     for (int z = zfirst; z < zlast; ++z) {
+  131.    VFr2               int z0 = z - zfirst;
+  132.    VFr2 I             z0uc[z0] /= (double) znump[z];
+  133.    VFr2----->     }
+  134.               
+  135.                   // [2] Divergence at the corner
+  136.                   #pragma ivdep
+  137.  + VF-------<     for (int c = cfirst; c < clast; ++c) {
+  138.    VF                 int s2 = c;
+  139.    VF                 int s = mesh->mapss3[s2];
+  140.    VF                 // Associated zone, corner, point
+  141.    VF                 int z = mesh->mapsz[s];
+  142.    VF                 int z0 = z - zfirst;
+  143.    VF                 int c0 = c - cfirst;
+  144.    VF                 int p = mesh->mapsp2[s];
+  145.    VF                 // Points
+  146.    VF                 int p1 = mesh->mapsp1[s];
+  147.    VF                 int p2 = mesh->mapsp2[s2];
+  148.    VF                 // Edges
+  149.    VF                 int e1 = mesh->mapse[s];
+  150.    VF                 int e2 = mesh->mapse[s2];
+  151.    VF         
+  152.    VF                 // Velocities and positions
+  153.    VF                 // 0 = point p
+  154.    VF I               up0 = pu[p];
+  155.    VF I               xp0 = px[p];
+  156.    VF                 // 1 = edge e2
+  157.    VF I               up1 = 0.5 * (pu[p] + pu[p2]);
+  158.    VF I               xp1 = ex[e2];
+  159.    VF                 // 2 = zone center z
+  160.    VF I               up2 = z0uc[z0];
+  161.    VF I               xp2 = zx[z];
+  162.    VF                 // 3 = edge e1
+  163.    VF I               up3 = 0.5 * (pu[p1] + pu[p]);
+  164.    VF I               xp3 = ex[e1];
+  165.    VF         
+  166.    VF                 // compute 2d cartesian volume of corner
+  167.    VF I               double cvolume = 0.5 * cross(xp2 - xp0, xp3 - xp1);
+  168.    VF                 c0area[c0] = cvolume;
+  169.    VF         
+  170.    VF                 // compute cosine angle
+  171.    VF I               double2 v1 = xp3 - xp0;
+  172.    VF I               double2 v2 = xp1 - xp0;
+  173.    VF                 double de1 = elen[e1];
+  174.    VF                 double de2 = elen[e2];
+  175.    VF I               double minelen = min(de1, de2);
+  176.    VF I               c0cos[c0] = ((minelen < 1.e-12) ?
+  177.    VF                         0. :
+  178.    VF                         4. * dot(v1, v2) / (de1 * de2));
+  179.    VF         
+  180.    VF                 // compute divergence of corner
+  181.    VF I               c0div[c0] = (cross(up2 - up0, xp3 - xp1) -
+  182.    VF                         cross(up3 - up1, xp2 - xp0)) /
+  183.    VF                         (2.0 * cvolume);
+  184.    VF         
+  185.    VF                 // compute evolution factor
+  186.    VF I               double2 dxx1 = 0.5 * (xp1 + xp2 - xp0 - xp3);
+  187.    VF I               double2 dxx2 = 0.5 * (xp2 + xp3 - xp0 - xp1);
+  188.    VF I               double dx1 = length(dxx1);
+  189.    VF I               double dx2 = length(dxx2);
+  190.    VF         
+  191.    VF                 // average corner-centered velocity
+  192.    VF I               double2 duav = 0.25 * (up0 + up1 + up2 + up3);
+  193.    VF         
+  194.    VF I               double test1 = abs(dot(dxx1, duav) * dx2);
+  195.    VF I               double test2 = abs(dot(dxx2, duav) * dx1);
+  196.    VF                 double num = (test1 > test2 ? dx1 : dx2);
+  197.    VF                 double den = (test1 > test2 ? dx2 : dx1);
+  198.    VF                 double r = num / den;
+  199.    VF                 double evol = sqrt(4.0 * cvolume * r);
+  200.    VF I               evol = min(evol, 2.0 * minelen);
+  201.    VF         
+  202.    VF                 // compute delta velocity
+  203.    VF I               double dv1 = length2(up1 + up2 - up0 - up3);
+  204.    VF I               double dv2 = length2(up2 + up3 - up0 - up1);
+  205.    VF I               double du = sqrt(max(dv1, dv2));
+  206.    VF         
+  207.    VF                 c0evol[c0] = (c0div[c0] < 0.0 ? evol : 0.);
+  208.    VF                 c0du[c0]   = (c0div[c0] < 0.0 ? du   : 0.);
+  209.    VF------->     }  // for s
+  210.               
+  211.    I              Memory::free(z0uc);
+  212.               }
+  213.               
+  214.               
+  215.               // Routine number [4]  in the full algorithm CS2DQforce(...)
+  216.               void QCS::setQCnForce(
+  217.                       const double* c0div,
+  218.                       const double* c0du,
+  219.                       const double* c0evol,
+  220.                       double2* c0qe,
+  221.                       const int sfirst,
+  222.                       const int slast) {
+  223.               
+  224.                   const Mesh* mesh = hydro->mesh;
+  225.               
+  226.                   const double2* pu = hydro->pu;
+  227.                   const double* zrp = hydro->zrp;
+  228.                   const double* zss = hydro->zss;
+  229.                   const double* elen = mesh->elen;
+  230.               
+  231.                   int cfirst = sfirst;
+  232.                   int clast = slast;
+  233.               
+  234.    I              double* c0rmu = Memory::alloc<double>(clast - cfirst);
+  235.               
+  236.                   const double gammap1 = qgamma + 1.0;
+  237.               
+  238.                   // [4.1] Compute the c0rmu (real Kurapatenko viscous scalar)
+  239.                   #pragma ivdep
+  240.    Vr2------<     for (int c = cfirst; c < clast; ++c) {
+  241.    Vr2                int c0 = c - cfirst;
+  242.    Vr2                int z = mesh->mapsz[c];
+  243.    Vr2        
+  244.    Vr2                // Kurapatenko form of the viscosity
+  245.    Vr2                double ztmp2 = q2 * 0.25 * gammap1 * c0du[c0];
+  246.    Vr2                double ztmp1 = q1 * zss[z];
+  247.    Vr2                double zkur = ztmp2 + sqrt(ztmp2 * ztmp2 + ztmp1 * ztmp1);
+  248.    Vr2                // Compute c0rmu for each corner
+  249.    Vr2                double rmu = zkur * zrp[z] * c0evol[c0];
+  250.    Vr2                c0rmu[c0] = ((c0div[c0] > 0.0) ? 0. : rmu);
+  251.    Vr2        
+  252.    Vr2------>     } // for c
+  253.               
+  254.                   // [4.2] Compute the c0qe for each corner
+  255.                   #pragma ivdep
+  256.  + VFr2-----<     for (int c = cfirst; c < clast; ++c) {
+  257.    VFr2               int s4 = c;
+  258.    VFr2               int s = mesh->mapss3[s4];
+  259.    VFr2               int c0 = c - cfirst;
+  260.    VFr2               int p = mesh->mapsp2[s];
+  261.    VFr2               // Associated point and edge 1
+  262.    VFr2               int p1 = mesh->mapsp1[s];
+  263.    VFr2               int e1 = mesh->mapse[s];
+  264.    VFr2               // Associated point and edge 2
+  265.    VFr2               int p2 = mesh->mapsp2[s4];
+  266.    VFr2               int e2 = mesh->mapse[s4];
+  267.    VFr2       
+  268.    VFr2               // Compute: c0qe(1,2,3)=edge 1, y component (2nd), 3rd corner
+  269.    VFr2               //          c0qe(2,1,3)=edge 2, x component (1st)
+  270.    VFr2 I             c0qe[2 * c0]     = c0rmu[c0] * (pu[p] - pu[p1]) / elen[e1];
+  271.    VFr2 I             c0qe[2 * c0 + 1] = c0rmu[c0] * (pu[p2] - pu[p]) / elen[e2];
+  272.    VFr2       
+  273.    VFr2----->     } // for s
+  274.               
+  275.    I              Memory::free(c0rmu);
+  276.               }
+  277.               
+  278.               
+  279.               // Routine number [5]  in the full algorithm CS2DQforce(...)
+  280.               void QCS::setForce(
+  281.                       const double* c0area,
+  282.                       const double2* c0qe,
+  283.                       double* c0cos,
+  284.                       double2* sfq,
+  285.                       const int sfirst,
+  286.                       const int slast) {
+  287.               
+  288.                   const Mesh* mesh = hydro->mesh;
+  289.                   const double* elen = mesh->elen;
+  290.               
+  291.                   int cfirst = sfirst;
+  292.                   int clast = slast;
+  293.               
+  294.    I              double* c0w = Memory::alloc<double>(clast - cfirst);
+  295.               
+  296.                   // [5.1] Preparation of extra variables
+  297.                   #pragma ivdep
+  298.  + Vr4------<     for (int c = cfirst; c < clast; ++c) {
+  299.    Vr4                int c0 = c - cfirst;
+  300.    Vr4                double csin2 = 1.0 - c0cos[c0] * c0cos[c0];
+  301.    Vr4                c0w[c0]   = ((csin2 < 1.e-4) ? 0. : c0area[c0] / csin2);
+  302.    Vr4                c0cos[c0] = ((csin2 < 1.e-4) ? 0. : c0cos[c0]);
+  303.    Vr4------>     } // for c
+  304.               
+  305.                   // [5.2] Set-Up the forces on corners
+  306.                   #pragma ivdep
+  307.  + VFr2-----<     for (int s = sfirst; s < slast; ++s) {
+  308.    VFr2               // Associated corners 1 and 2, and edge
+  309.    VFr2               int c1 = s;
+  310.    VFr2               int c10 = c1 - cfirst;
+  311.    VFr2               int c2 = mesh->mapss4[s];
+  312.    VFr2               int c20 = c2 - cfirst;
+  313.    VFr2               int e = mesh->mapse[s];
+  314.    VFr2               // Edge length for c1, c2 contribution to s
+  315.    VFr2               double el = elen[e];
+  316.    VFr2       
+  317.    VFr2 I             sfq[s] = (c0w[c10] * (c0qe[2*c10+1] + c0cos[c10] * c0qe[2*c10]) +
+  318.    VFr2                         c0w[c20] * (c0qe[2*c20] + c0cos[c20] * c0qe[2*c20+1]))
+  319.    VFr2                   / el;
+  320.    VFr2       
+  321.    VFr2----->     } // for s
+  322.               
+  323.    I              Memory::free(c0w);
+  324.               }
+  325.               
+  326.               
+  327.               // Routine number [6] in the full algorithm
+  328.               void QCS::setVelDiff(
+  329.                       const int sfirst,
+  330.                       const int slast) {
+  331.               
+  332.                   const Mesh* mesh = hydro->mesh;
+  333.                   const int nums = mesh->nums;
+  334.                   const int numz = mesh->numz;
+  335.                   int zfirst = mesh->mapsz[sfirst];
+  336.                   int zlast = (slast < nums ? mesh->mapsz[slast] : numz);
+  337.                   const double2* px = mesh->pxp;
+  338.                   const double2* pu = hydro->pu;
+  339.                   const double* zss = hydro->zss;
+  340.                   double* zdu = hydro->zdu;
+  341.                   const double* elen = mesh->elen;
+  342.               
+  343.    I              double* z0tmp = Memory::alloc<double>(zlast - zfirst);
+  344.               
+  345.    Vr4 I---<>     fill(&z0tmp[0], &z0tmp[zlast-zfirst], 0.);
+  346.  + Fr2------<     for (int s = sfirst; s < slast; ++s) {
+  347.    Fr2                int p1 = mesh->mapsp1[s];
+  348.    Fr2                int p2 = mesh->mapsp2[s];
+  349.    Fr2                int z = mesh->mapsz[s];
+  350.    Fr2                int e = mesh->mapse[s];
+  351.    Fr2                int z0 = z - zfirst;
+  352.    Fr2        
+  353.    Fr2 I              double2 dx = px[p2] - px[p1];
+  354.    Fr2 I              double2 du = pu[p2] - pu[p1];
+  355.    Fr2                double lenx = elen[e];
+  356.    Fr2 I              double dux = dot(du, dx);
+  357.    Fr2 I              dux = (lenx > 0. ? abs(dux) / lenx : 0.);
+  358.    Fr2        
+  359.    Fr2 I              z0tmp[z0] = max(z0tmp[z0], dux);
+  360.    Fr2------>     }
+  361.               
+  362.  + r4-------<     for (int z = zfirst; z < zlast; ++z) {
+  363.    r4                 int z0 = z - zfirst;
+  364.    r4                 zdu[z] = q1 * zss[z] + 2. * q2 * z0tmp[z0];
+  365.    r4------->     }
+  366.               
+  367.    I              Memory::free(z0tmp);
+  368.               }
+  369.               
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 26, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 26, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 26, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 26, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 26, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 27, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 27, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 27, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 27, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 27, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 28, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 28, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 28, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 28, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA QCS, File = QCS.cc, Line = 28, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 43, Column = 20 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 44, Column = 20 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 45, Column = 18 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 46, Column = 19 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 47, Column = 19 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 48, Column = 19 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3171 CC: IPA calcForce, File = QCS.cc, Line = 59, Column = 5 
+  "setCornerDiv"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:92) was not inlined because it is not in the body of a loop.
+
+CC-3171 CC: IPA calcForce, File = QCS.cc, Line = 70, Column = 5 
+  "setQCnForce"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:216) was not inlined because it is not in the body of a loop.
+
+CC-3171 CC: IPA calcForce, File = QCS.cc, Line = 73, Column = 5 
+  "setForce"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:280) was not inlined because it is not in the body of a loop.
+
+CC-3171 CC: IPA calcForce, File = QCS.cc, Line = 76, Column = 5 
+  "setVelDiff"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:328) was not inlined because it is not in the body of a loop.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 78, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 79, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 80, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 81, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 82, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = QCS.cc, Line = 83, Column = 5 
+  Tiny leaf routine "free<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 117, Column = 19 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 118, Column = 13 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 118, Column = 18 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 118, Column = 23 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 118, Column = 28 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 119, Column = 13 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 119, Column = 18 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 119, Column = 23 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 119, Column = 28 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:26) was textually inlined.
+
+CC-6005 CC: SCALAR setCornerDiv, File = QCS.cc, Line = 122 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR setCornerDiv, File = QCS.cc, Line = 122 
+  A loop was vectorized.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 122, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:27) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 122, Column = 5 
+  Tiny routine "fill<double2 *, double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR setCornerDiv, File = QCS.cc, Line = 123 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR setCornerDiv, File = QCS.cc, Line = 123 
+  A loop was not vectorized because a recurrence was found between "pu" and "z0uc" at line 127.
+
+CC-3182 CC: IPA setCornerDiv, File = QCS.cc, Line = 123, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 127, Column = 9 
+  Tiny leaf routine "operator+="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:38) was textually inlined.
+
+CC-6005 CC: SCALAR setCornerDiv, File = QCS.cc, Line = 130 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR setCornerDiv, File = QCS.cc, Line = 130 
+  A loop was vectorized.
+
+CC-3182 CC: IPA setCornerDiv, File = QCS.cc, Line = 130, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 132, Column = 9 
+  Tiny leaf routine "operator/="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:59) was textually inlined.
+
+CC-6204 CC: VECTOR setCornerDiv, File = QCS.cc, Line = 137 
+  A loop was vectorized.
+
+CC-3182 CC: IPA setCornerDiv, File = QCS.cc, Line = 137, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 154, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 155, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 157, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 157, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 157, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 158, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 160, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 161, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 163, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 163, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 163, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 164, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 167, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 167, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 167, Column = 16 
+  Tiny leaf routine "cross"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:147) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 171, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 172, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 175, Column = 24 
+  Tiny leaf routine "min<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:195) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 176, Column = 9 
+  Tiny leaf routine "dot"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:141) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 181, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 181, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 181, Column = 9 
+  Tiny leaf routine "cross"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:147) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 181, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 181, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 181, Column = 9 
+  Tiny leaf routine "cross"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:147) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 186, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 186, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 186, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 186, Column = 17 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 187, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 187, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 187, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 187, Column = 17 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 188, Column = 20 
+  Tiny leaf routine "length"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:153) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 189, Column = 20 
+  Tiny leaf routine "length"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:153) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 192, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 192, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 192, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 192, Column = 17 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 194, Column = 22 
+  Tiny leaf routine "dot"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:141) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 194, Column = 22 
+  Tiny leaf routine "abs"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:70) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 195, Column = 22 
+  Tiny leaf routine "dot"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:141) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 195, Column = 22 
+  Tiny leaf routine "abs"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:70) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 200, Column = 9 
+  Tiny leaf routine "min<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:195) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 203, Column = 16 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 203, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 203, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 203, Column = 16 
+  Tiny leaf routine "length2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:159) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 204, Column = 16 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 204, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 204, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 204, Column = 16 
+  Tiny leaf routine "length2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:159) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 205, Column = 19 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:219) was textually inlined.
+
+CC-3001 CC: IPA setCornerDiv, File = QCS.cc, Line = 211, Column = 5 
+  Tiny leaf routine "free<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 234, Column = 19 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-6005 CC: SCALAR setQCnForce, File = QCS.cc, Line = 240 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR setQCnForce, File = QCS.cc, Line = 240 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR setQCnForce, File = QCS.cc, Line = 256 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR setQCnForce, File = QCS.cc, Line = 256 
+  A loop was vectorized.
+
+CC-3182 CC: IPA setQCnForce, File = QCS.cc, Line = 256, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 270, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 270, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 270, Column = 9 
+  Tiny routine "operator/"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:131) was textually inlined and flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 270, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 271, Column = 9 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 271, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 271, Column = 9 
+  Tiny routine "operator/"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:131) was textually inlined and flattened.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 271, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setQCnForce, File = QCS.cc, Line = 275, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 294, Column = 17 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-6375 CC: VECTOR setForce, File = QCS.cc, Line = 298 
+  A loop would benefit from "#pragma safe_address".
+
+CC-6005 CC: SCALAR setForce, File = QCS.cc, Line = 298 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR setForce, File = QCS.cc, Line = 298 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR setForce, File = QCS.cc, Line = 307 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR setForce, File = QCS.cc, Line = 307 
+  A loop was vectorized.
+
+CC-3182 CC: IPA setForce, File = QCS.cc, Line = 307, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny routine "operator/"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:131) was textually inlined and flattened.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 317, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:31) was textually inlined.
+
+CC-3001 CC: IPA setForce, File = QCS.cc, Line = 323, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 343, Column = 19 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:30) was textually inlined.
+
+CC-6005 CC: SCALAR setVelDiff, File = QCS.cc, Line = 345 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR setVelDiff, File = QCS.cc, Line = 345 
+  A loop was vectorized.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 345, Column = 5 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR setVelDiff, File = QCS.cc, Line = 346 
+  A loop was unrolled 2 times.
+
+CC-6291 CC: VECTOR setVelDiff, File = QCS.cc, Line = 346 
+  A loop was not vectorized because a recurrence was found between "elen" at line 355 and "z0tmp" at line 359.
+
+CC-3182 CC: IPA setVelDiff, File = QCS.cc, Line = 346, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 353, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 354, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 356, Column = 20 
+  Tiny leaf routine "dot"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:141) was textually inlined.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 357, Column = 9 
+  Tiny leaf routine "abs"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:70) was textually inlined.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 359, Column = 9 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:219) was textually inlined.
+
+CC-6005 CC: SCALAR setVelDiff, File = QCS.cc, Line = 362 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR setVelDiff, File = QCS.cc, Line = 362 
+  A loop was not vectorized because a recurrence was found between "this" and "zdu" at line 364.
+
+CC-3001 CC: IPA setVelDiff, File = QCS.cc, Line = 367, Column = 5 
+  Tiny leaf routine "free<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/QCS.cc:39) was textually inlined.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

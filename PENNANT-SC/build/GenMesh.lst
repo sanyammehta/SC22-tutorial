@@ -1,0 +1,1892 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/GenMesh.o src/GenMesh.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc
+Date     : 06/04/2020  18:09:49
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.                   /*
+    2.                    * GenMesh.cc
+    3.                    *
+    4.                    *  Created on: Jun 4, 2013
+    5.                    *      Author: cferenba
+    6.                    *
+    7.                    * Copyright (c) 2013, Triad National Security, LLC.
+    8.                    * All rights reserved.
+    9.                    * Use of this source code is governed by a BSD-style open-source
+   10.                    * license; see top-level LICENSE file for full license text.
+   11.                    */
+   12.                   
+   13.                   #include "GenMesh.hh"
+   14.                   
+   15.                   #include <cstdlib>
+   16.                   #include <cmath>
+   17.                   #include <iostream>
+   18.                   #include <algorithm>
+   19.                   
+   20.                   #include "Vec2.hh"
+   21.                   #include "Parallel.hh"
+   22.                   #include "InputFile.hh"
+   23.                   
+   24.                   using namespace std;
+   25.                   
+   26.                   
+   27.  +                GenMesh::GenMesh(const InputFile* inp) {
+   28.                   
+   29.                       using Parallel::mype;
+   30.                   
+   31.  +                    meshtype = inp->getString("meshtype", "");
+   32.  +                    if (meshtype.empty()) {
+   33.                           if (mype == 0)
+   34.  +                            cerr << "Error:  must specify meshtype" << endl;
+   35.  +                        exit(1);
+   36.                       }
+   37.    Ip                 if (meshtype != "pie" &&
+   38.                               meshtype != "rect" &&
+   39.                               meshtype != "hex") {
+   40.                           if (mype == 0)
+   41.  +                            cerr << "Error:  invalid meshtype " << meshtype << endl;
+   42.  +                        exit(1);
+   43.                       }
+   44.  + Ip                 vector<double> params =
+   45.                               inp->getDoubleList("meshparams", vector<double>());
+   46.    I                  if (params.empty()) {
+   47.                           if (mype == 0)
+   48.  +                            cerr << "Error:  must specify meshparams" << endl;
+   49.  +                        exit(1);
+   50.                       }
+   51.    I                  if (params.size() > 4) {
+   52.                           if (mype == 0)
+   53.  +                            cerr << "Error:  meshparams must have <= 4 values" << endl;
+   54.  +                        exit(1);
+   55.                       }
+   56.                   
+   57.    I                  gnzx = params[0];
+   58.    I                  gnzy = (params.size() >= 2 ? params[1] : gnzx);
+   59.    Ip                 if (meshtype != "pie")
+   60.    I                      lenx = (params.size() >= 3 ? params[2] : 1.0);
+   61.                       else
+   62.                           // convention:  x = theta, y = r
+   63.    I                      lenx = (params.size() >= 3 ? params[2] : 90.0)
+   64.                                   * M_PI / 180.0;
+   65.    I                  leny = (params.size() >= 4 ? params[3] : 1.0);
+   66.                   
+   67.                       if (gnzx <= 0 || gnzy <= 0 || lenx <= 0. || leny <= 0. ) {
+   68.                           if (mype == 0)
+   69.  +                            cerr << "Error:  meshparams values must be positive" << endl;
+   70.  +                        exit(1);
+   71.                       }
+   72.    Ip                 if (meshtype == "pie" && lenx >= 2. * M_PI) {
+   73.                           if (mype == 0)
+   74.  +                            cerr << "Error:  meshparams theta must be < 360" << endl;
+   75.  +                        exit(1);
+   76.                       }
+   77.                   
+   78.                   }
+   79.                   
+   80.                   
+   81.  +                GenMesh::~GenMesh() {}
+   82.                   
+   83.                   
+   84.                   void GenMesh::generate(
+   85.                           std::vector<double2>& pointpos,
+   86.                           std::vector<int>& zonestart,
+   87.                           std::vector<int>& zonesize,
+   88.                           std::vector<int>& zonepoints,
+   89.                           std::vector<int>& slavemstrpes,
+   90.                           std::vector<int>& slavemstrcounts,
+   91.                           std::vector<int>& slavepoints,
+   92.                           std::vector<int>& masterslvpes,
+   93.                           std::vector<int>& masterslvcounts,
+   94.                           std::vector<int>& masterpoints){
+   95.                   
+   96.                       // do calculations common to all mesh types
+   97.  +                    calcNumPE();
+   98.                       zxoffset = mypex * gnzx / numpex;
+   99.                       const int zxstop = (mypex + 1) * gnzx / numpex;
+  100.                       nzx = zxstop - zxoffset;
+  101.                       zyoffset = mypey * gnzy / numpey;
+  102.                       const int zystop = (mypey + 1) * gnzy / numpey;
+  103.                       nzy = zystop - zyoffset;
+  104.                   
+  105.                       // mesh type-specific calculations
+  106.    Ip                 if (meshtype == "pie")
+  107.  +                        generatePie(pointpos, zonestart, zonesize, zonepoints,
+  108.                                   slavemstrpes, slavemstrcounts, slavepoints,
+  109.                                   masterslvpes, masterslvcounts, masterpoints);
+  110.    Ip                 else if (meshtype == "rect")
+  111.  +                        generateRect(pointpos, zonestart, zonesize, zonepoints,
+  112.                                   slavemstrpes, slavemstrcounts, slavepoints,
+  113.                                   masterslvpes, masterslvcounts, masterpoints);
+  114.    Ip                 else if (meshtype == "hex")
+  115.  +                        generateHex(pointpos, zonestart, zonesize, zonepoints,
+  116.                                   slavemstrpes, slavemstrcounts, slavepoints,
+  117.                                   masterslvpes, masterslvcounts, masterpoints);
+  118.                   
+  119.                   }
+  120.                   
+  121.                   
+  122.                   void GenMesh::generateRect(
+  123.                           std::vector<double2>& pointpos,
+  124.                           std::vector<int>& zonestart,
+  125.                           std::vector<int>& zonesize,
+  126.                           std::vector<int>& zonepoints,
+  127.                           std::vector<int>& slavemstrpes,
+  128.                           std::vector<int>& slavemstrcounts,
+  129.                           std::vector<int>& slavepoints,
+  130.                           std::vector<int>& masterslvpes,
+  131.                           std::vector<int>& masterslvcounts,
+  132.                           std::vector<int>& masterpoints) {
+  133.                   
+  134.                       using Parallel::numpe;
+  135.                       using Parallel::mype;
+  136.                   
+  137.                       const int nz = nzx * nzy;
+  138.                       const int npx = nzx + 1;
+  139.                       const int npy = nzy + 1;
+  140.                       const int np = npx * npy;
+  141.                   
+  142.                       // generate point coordinates
+  143.  +                    pointpos.reserve(np);
+  144.                       double dx = lenx / (double) gnzx;
+  145.                       double dy = leny / (double) gnzy;
+  146.  + 1------------<     for (int j = 0; j < npy; ++j) {
+  147.    1                      double y = dy * (double) (j + zyoffset);
+  148.  + 1 2----------<         for (int i = 0; i < npx; ++i) {
+  149.    1 2                        double x = dx * (double) (i + zxoffset);
+  150.  + 1 2 I                      pointpos.push_back(make_double2(x, y));
+  151.    1 2---------->         }
+  152.    1------------>     }
+  153.                   
+  154.                       // generate zone adjacency lists
+  155.  +                    zonestart.reserve(nz);
+  156.  +                    zonesize.reserve(nz);
+  157.  +                    zonepoints.reserve(4 * nz);
+  158.  + 1------------<     for (int j = 0; j < nzy; ++j) {
+  159.  + 1 2----------<         for (int i = 0; i < nzx; ++i) {
+  160.  + 1 2 I                      zonestart.push_back(zonepoints.size());
+  161.  + 1 2                        zonesize.push_back(4);
+  162.    1 2                        int p0 = j * npx + i;
+  163.  + 1 2                        zonepoints.push_back(p0);
+  164.  + 1 2                        zonepoints.push_back(p0 + 1);
+  165.  + 1 2                        zonepoints.push_back(p0 + npx + 1);
+  166.  + 1 2                        zonepoints.push_back(p0 + npx);
+  167.    1 2---------->        }
+  168.    1------------>     }
+  169.                   
+  170.                       if (numpe == 1) return;
+  171.                   
+  172.                       // estimate sizes of slave/master arrays
+  173.  +                    slavepoints.reserve((mypey != 0) * npx + (mypex != 0) * npy);
+  174.  +                    masterpoints.reserve((mypey != numpey - 1) * npx +
+  175.                               (mypex != numpex - 1) * npy + 1);
+  176.                   
+  177.                       // enumerate slave points
+  178.                       // slave point with master at lower left
+  179.                       if (mypex != 0 && mypey != 0) {
+  180.                           int mstrpe = mype - numpex - 1;
+  181.  +                        slavepoints.push_back(0);
+  182.  +                        slavemstrpes.push_back(mstrpe);
+  183.  +                        slavemstrcounts.push_back(1);
+  184.                       }
+  185.                       // slave points with master below
+  186.                       if (mypey != 0) {
+  187.                           int mstrpe = mype - numpex;
+  188.    I                      int oldsize = slavepoints.size();
+  189.                           int p = 0;
+  190.  + 1------------<         for (int i = 0; i < npx; ++i) {
+  191.    1                          if (i == 0 && mypex != 0) { p++; continue; }
+  192.  + 1                          slavepoints.push_back(p);
+  193.    1                          p++;
+  194.    1------------>         }
+  195.  +                        slavemstrpes.push_back(mstrpe);
+  196.  + I                      slavemstrcounts.push_back(slavepoints.size() - oldsize);
+  197.                       }
+  198.                       // slave points with master to left
+  199.                       if (mypex != 0) {
+  200.                           int mstrpe = mype - 1;
+  201.    I                      int oldsize = slavepoints.size();
+  202.                           int p = 0;
+  203.  + 1------------<         for (int j = 0; j < npy; ++j) {
+  204.    1                          if (j == 0 && mypey != 0) { p += npx; continue; }
+  205.  + 1                          slavepoints.push_back(p);
+  206.    1                          p += npx;
+  207.    1------------>         }
+  208.  +                        slavemstrpes.push_back(mstrpe);
+  209.  + I                      slavemstrcounts.push_back(slavepoints.size() - oldsize);
+  210.                       }
+  211.                   
+  212.                       // enumerate master points
+  213.                       // master points with slave to right
+  214.                       if (mypex != numpex - 1) {
+  215.                           int slvpe = mype + 1;
+  216.    I                      int oldsize = masterpoints.size();
+  217.                           int p = npx - 1;
+  218.  + 1------------<         for (int j = 0; j < npy; ++j) {
+  219.    1                          if (j == 0 && mypey != 0) { p += npx; continue; }
+  220.  + 1                          masterpoints.push_back(p);
+  221.    1                          p += npx;
+  222.    1------------>         }
+  223.  +                        masterslvpes.push_back(slvpe);
+  224.  + I                      masterslvcounts.push_back(masterpoints.size() - oldsize);
+  225.                       }
+  226.                       // master points with slave above
+  227.                       if (mypey != numpey - 1) {
+  228.                           int slvpe = mype + numpex;
+  229.    I                      int oldsize = masterpoints.size();
+  230.                           int p = (npy - 1) * npx;
+  231.  + 1------------<         for (int i = 0; i < npx; ++i) {
+  232.    1                          if (i == 0 && mypex != 0) { p++; continue; }
+  233.  + 1                          masterpoints.push_back(p);
+  234.    1                          p++;
+  235.    1------------>         }
+  236.  +                        masterslvpes.push_back(slvpe);
+  237.  + I                      masterslvcounts.push_back(masterpoints.size() - oldsize);
+  238.                       }
+  239.                       // master point with slave at upper right
+  240.                       if (mypex != numpex - 1 && mypey != numpey - 1) {
+  241.                           int slvpe = mype + numpex + 1;
+  242.                           int p = npx * npy - 1;
+  243.  +                        masterpoints.push_back(p);
+  244.  +                        masterslvpes.push_back(slvpe);
+  245.  +                        masterslvcounts.push_back(1);
+  246.                       }
+  247.                   
+  248.                   }
+  249.                   
+  250.                   
+  251.                   void GenMesh::generatePie(
+  252.                           std::vector<double2>& pointpos,
+  253.                           std::vector<int>& zonestart,
+  254.                           std::vector<int>& zonesize,
+  255.                           std::vector<int>& zonepoints,
+  256.                           std::vector<int>& slavemstrpes,
+  257.                           std::vector<int>& slavemstrcounts,
+  258.                           std::vector<int>& slavepoints,
+  259.                           std::vector<int>& masterslvpes,
+  260.                           std::vector<int>& masterslvcounts,
+  261.                           std::vector<int>& masterpoints) {
+  262.                   
+  263.                       using Parallel::numpe;
+  264.                       using Parallel::mype;
+  265.                   
+  266.                       const int nz = nzx * nzy;
+  267.                       const int npx = nzx + 1;
+  268.                       const int npy = nzy + 1;
+  269.                       const int np = (mypey == 0 ? npx * (npy - 1) + 1 : npx * npy);
+  270.                   
+  271.                       // generate point coordinates
+  272.  +                    pointpos.reserve(np);
+  273.                       double dth = lenx / (double) gnzx;
+  274.    Ip  I              double dr  = leny / (double) gnzy;
+  275.  + 1------------<     for (int j = 0; j < npy; ++j) {
+  276.    1                      if (j + zyoffset == 0) {
+  277.  + 1 I                        pointpos.push_back(make_double2(0., 0.));
+  278.    1                          continue;
+  279.    1                      }
+  280.    1                      double r = dr * (double) (j + zyoffset);
+  281.  + 1 2----------<         for (int i = 0; i < npx; ++i) {
+  282.    1 2                        double th = dth * (double) (gnzx - (i + zxoffset));
+  283.    1 2                        double x = r * cos(th);
+  284.    1 2                        double y = r * sin(th);
+  285.  + 1 2 I                      pointpos.push_back(make_double2(x, y));
+  286.    1 2---------->         }
+  287.    1------------>     }
+  288.                   
+  289.                       // generate zone adjacency lists
+  290.  +                    zonestart.reserve(nz);
+  291.  +                    zonesize.reserve(nz);
+  292.  +                    zonepoints.reserve(4 * nz);
+  293.  + 1------------<     for (int j = 0; j < nzy; ++j) {
+  294.  + 1 2----------<         for (int i = 0; i < nzx; ++i) {
+  295.  + 1 2 I                      zonestart.push_back(zonepoints.size());
+  296.    1 2                        int p0 = j * npx + i;
+  297.    1 2                        if (mypey == 0) p0 -= npx - 1;
+  298.    1 2                        if (j + zyoffset == 0) {
+  299.  + 1 2                            zonesize.push_back(3);
+  300.  + 1 2                            zonepoints.push_back(0);
+  301.    1 2                        }
+  302.    1 2                        else {
+  303.  + 1 2                            zonesize.push_back(4);
+  304.  + 1 2                            zonepoints.push_back(p0);
+  305.  + 1 2                            zonepoints.push_back(p0 + 1);
+  306.    1 2                        }
+  307.  + 1 2                        zonepoints.push_back(p0 + npx + 1);
+  308.  + 1 2                        zonepoints.push_back(p0 + npx);
+  309.    1 2---------->         }
+  310.    1------------>     }
+  311.                   
+  312.                       if (numpe == 1) return;
+  313.                   
+  314.                       // estimate sizes of slave/master arrays
+  315.  +                    slavepoints.reserve((mypey != 0) * npx + (mypex != 0) * npy);
+  316.  +                    masterpoints.reserve((mypey != numpey - 1) * npx +
+  317.                               (mypex != numpex - 1) * npy + 1);
+  318.                   
+  319.                       // enumerate slave points
+  320.                       // slave point with master at lower left
+  321.                       if (mypex != 0 && mypey != 0) {
+  322.                           int mstrpe = mype - numpex - 1;
+  323.  +                        slavepoints.push_back(0);
+  324.  +                        slavemstrpes.push_back(mstrpe);
+  325.  +                        slavemstrcounts.push_back(1);
+  326.                       }
+  327.                       // slave points with master below
+  328.                       if (mypey != 0) {
+  329.                           int mstrpe = mype - numpex;
+  330.    I                      int oldsize = slavepoints.size();
+  331.                           int p = 0;
+  332.  + 1------------<         for (int i = 0; i < npx; ++i) {
+  333.    1                          if (i == 0 && mypex != 0) { p++; continue; }
+  334.  + 1                          slavepoints.push_back(p);
+  335.    1                          p++;
+  336.    1------------>         }
+  337.  +                        slavemstrpes.push_back(mstrpe);
+  338.  + I                      slavemstrcounts.push_back(slavepoints.size() - oldsize);
+  339.                       }
+  340.                       // slave points with master to left
+  341.                       if (mypex != 0) {
+  342.                           int mstrpe = mype - 1;
+  343.    I                      int oldsize = slavepoints.size();
+  344.                           if (mypey == 0) {
+  345.  +                            slavepoints.push_back(0);
+  346.                               // special case:
+  347.                               // slave point at origin, master not to immediate left
+  348.                               if (mypex > 1) {
+  349.  +                                slavemstrpes.push_back(0);
+  350.  +                                slavemstrcounts.push_back(1);
+  351.                                   oldsize += 1;
+  352.                               }
+  353.                           }
+  354.                           int p = (mypey > 0 ? npx : 1);
+  355.  + 1------------<         for (int j = 1; j < npy; ++j) {
+  356.  + 1                          slavepoints.push_back(p);
+  357.    1                          p += npx;
+  358.    1------------>         }
+  359.  +                        slavemstrpes.push_back(mstrpe);
+  360.  + I                      slavemstrcounts.push_back(slavepoints.size() - oldsize);
+  361.                       }
+  362.                   
+  363.                       // enumerate master points
+  364.                       // master points with slave to right
+  365.                       if (mypex != numpex - 1) {
+  366.                           int slvpe = mype + 1;
+  367.    I                      int oldsize = masterpoints.size();
+  368.                           // special case:  origin as master for slave on PE 1
+  369.                           if (mypex == 0 && mypey == 0) {
+  370.  +                            masterpoints.push_back(0);
+  371.                           }
+  372.                           int p = (mypey > 0 ? 2 * npx - 1 : npx);
+  373.  + 1------------<         for (int j = 1; j < npy; ++j) {
+  374.  + 1                          masterpoints.push_back(p);
+  375.    1                          p += npx;
+  376.    1------------>         }
+  377.  +                        masterslvpes.push_back(slvpe);
+  378.  + I                      masterslvcounts.push_back(masterpoints.size() - oldsize);
+  379.                           // special case:  origin as master for slaves on PEs > 1
+  380.                           if (mypex == 0 && mypey == 0) {
+  381.  + 1------------<             for (int slvpe = 2; slvpe < numpex; ++slvpe) {
+  382.  + 1                              masterpoints.push_back(0);
+  383.  + 1                              masterslvpes.push_back(slvpe);
+  384.  + 1                              masterslvcounts.push_back(1);
+  385.    1------------>             }
+  386.                           }
+  387.                       }
+  388.                       // master points with slave above
+  389.                       if (mypey != numpey - 1) {
+  390.                           int slvpe = mype + numpex;
+  391.    I                      int oldsize = masterpoints.size();
+  392.                           int p = (npy - 1) * npx;
+  393.                           if (mypey == 0) p -= npx - 1;
+  394.  + 1------------<         for (int i = 0; i < npx; ++i) {
+  395.    1                          if (i == 0 && mypex != 0) { p++; continue; }
+  396.  + 1                          masterpoints.push_back(p);
+  397.    1                          p++;
+  398.    1------------>         }
+  399.  +                        masterslvpes.push_back(slvpe);
+  400.  + I                      masterslvcounts.push_back(masterpoints.size() - oldsize);
+  401.                       }
+  402.                       // master point with slave at upper right
+  403.                       if (mypex != numpex - 1 && mypey != numpey - 1) {
+  404.                           int slvpe = mype + numpex + 1;
+  405.                           int p = npx * npy - 1;
+  406.                           if (mypey == 0) p -= npx - 1;
+  407.  +                        masterpoints.push_back(p);
+  408.  +                        masterslvpes.push_back(slvpe);
+  409.  +                        masterslvcounts.push_back(1);
+  410.                       }
+  411.                   
+  412.                   }
+  413.                   
+  414.                   
+  415.                   void GenMesh::generateHex(
+  416.                           std::vector<double2>& pointpos,
+  417.                           std::vector<int>& zonestart,
+  418.                           std::vector<int>& zonesize,
+  419.                           std::vector<int>& zonepoints,
+  420.                           std::vector<int>& slavemstrpes,
+  421.                           std::vector<int>& slavemstrcounts,
+  422.                           std::vector<int>& slavepoints,
+  423.                           std::vector<int>& masterslvpes,
+  424.                           std::vector<int>& masterslvcounts,
+  425.                           std::vector<int>& masterpoints) {
+  426.                   
+  427.                       using Parallel::numpe;
+  428.                       using Parallel::mype;
+  429.                   
+  430.                       const int nz = nzx * nzy;
+  431.                       const int npx = nzx + 1;
+  432.                       const int npy = nzy + 1;
+  433.                   
+  434.                       // generate point coordinates
+  435.  +                    pointpos.reserve(2 * npx * npy);  // upper bound
+  436.                       double dx = lenx / (double) (gnzx - 1);
+  437.                       double dy = leny / (double) (gnzy - 1);
+  438.                   
+  439.  + Ip  I              vector<int> pbase(npy);
+  440.  + r2-----------<     for (int j = 0; j < npy; ++j) {
+  441.    r2 I                   pbase[j] = pointpos.size();
+  442.    r2                     int gj = j + zyoffset;
+  443.    r2                     double y = dy * ((double) gj - 0.5);
+  444.    r2 I                   y = max(0., min(leny, y));
+  445.  + r2 2---------<         for (int i = 0; i < npx; ++i) {
+  446.    r2 2                       int gi = i + zxoffset;
+  447.    r2 2                       double x = dx * ((double) gi - 0.5);
+  448.    r2 2 I                     x = max(0., min(lenx, x));
+  449.    r2 2                       if (gi == 0 || gi == gnzx || gj == 0 || gj == gnzy)
+  450.  + r2 2 I                         pointpos.push_back(make_double2(x, y));
+  451.    r2 2                       else if (i == nzx && j == 0)
+  452.  + r2 2 I                         pointpos.push_back(
+  453.    r2 2                                   make_double2(x - dx / 6., y + dy / 6.));
+  454.    r2 2                       else if (i == 0 && j == nzy)
+  455.  + r2 2 I                         pointpos.push_back(
+  456.    r2 2                                   make_double2(x + dx / 6., y - dy / 6.));
+  457.    r2 2                       else {
+  458.  + r2 2 I                         pointpos.push_back(
+  459.    r2 2                                   make_double2(x - dx / 6., y + dy / 6.));
+  460.  + r2 2 I                         pointpos.push_back(
+  461.    r2 2                                   make_double2(x + dx / 6., y - dy / 6.));
+  462.    r2 2                       }
+  463.    r2 2--------->         } // for i
+  464.    r2----------->     } // for j
+  465.    I                  int np = pointpos.size();
+  466.                   
+  467.                       // generate zone adjacency lists
+  468.  +                    zonestart.reserve(nz);
+  469.  +                    zonesize.reserve(nz);
+  470.  +                    zonepoints.reserve(6 * nz);  // upper bound
+  471.  + 1------------<     for (int j = 0; j < nzy; ++j) {
+  472.    1                      int gj = j + zyoffset;
+  473.    1 I                    int pbasel = pbase[j];
+  474.    1 I                    int pbaseh = pbase[j+1];
+  475.    1                      if (mypex > 0) {
+  476.    1                          if (gj > 0) pbasel += 1;
+  477.    1                          if (j < nzy - 1) pbaseh += 1;
+  478.    1                      }
+  479.  + 1 2----------<         for (int i = 0; i < nzx; ++i) {
+  480.    1 2                        int gi = i + zxoffset;
+  481.  + 1 2 Ip  I                  vector<int> v(6);
+  482.    1 2 I                      v[1] = pbasel + 2 * i;
+  483.    1 2 I                      v[0] = v[1] - 1;
+  484.    1 2 I                      v[2] = v[1] + 1;
+  485.    1 2 I                      v[5] = pbaseh + 2 * i;
+  486.    1 2 I                      v[4] = v[5] + 1;
+  487.    1 2 I                      v[3] = v[4] + 1;
+  488.    1 2                        if (gj == 0) {
+  489.    1 2 I                          v[0] = pbasel + i;
+  490.    1 2 I                          v[2] = v[0] + 1;
+  491.  + 1 2 I                          if (gi == gnzx - 1) v.erase(v.begin()+3);
+  492.  + 1 2 I                          v.erase(v.begin()+1);
+  493.    1 2                        } // if j
+  494.    1 2                        else if (gj == gnzy - 1) {
+  495.    1 2 I                          v[5] = pbaseh + i;
+  496.    1 2 I                          v[3] = v[5] + 1;
+  497.  + 1 2 I                          v.erase(v.begin()+4);
+  498.  + 1 2 I                          if (gi == 0) v.erase(v.begin()+0);
+  499.    1 2                        } // else if j
+  500.    1 2                        else if (gi == 0)
+  501.  + 1 2 I                          v.erase(v.begin()+0);
+  502.    1 2                        else if (gi == gnzx - 1)
+  503.  + 1 2 I                          v.erase(v.begin()+3);
+  504.  + 1 2 I                      zonestart.push_back(zonepoints.size());
+  505.  + 1 2 I                      zonesize.push_back(v.size());
+  506.  + 1 2 I                      zonepoints.insert(zonepoints.end(), v.begin(), v.end());
+  507.    1 2 Ip------->         } // for i
+  508.    1------------>     } // for j
+  509.                   
+  510.    Ip                 if (numpe == 1) return;
+  511.                   
+  512.                       // estimate upper bounds for sizes of slave/master arrays
+  513.  +                    slavepoints.reserve((mypey != 0) * 2 * npx +
+  514.                               (mypex != 0) * 2 * npy);
+  515.  +                    masterpoints.reserve((mypey != numpey - 1) * 2 * npx +
+  516.                               (mypex != numpex - 1) * 2 * npy + 2);
+  517.                   
+  518.                       // enumerate slave points
+  519.                       // slave points with master at lower left
+  520.                       if (mypex != 0 && mypey != 0) {
+  521.                           int mstrpe = mype - numpex - 1;
+  522.  +                        slavepoints.push_back(0);
+  523.  +                        slavepoints.push_back(1);
+  524.  +                        slavemstrpes.push_back(mstrpe);
+  525.  +                        slavemstrcounts.push_back(2);
+  526.                       }
+  527.                       // slave points with master below
+  528.                       if (mypey != 0) {
+  529.                           int p = 0;
+  530.                           int mstrpe = mype - numpex;
+  531.    I                      int oldsize = slavepoints.size();
+  532.  + 1------------<         for (int i = 0; i < npx; ++i) {
+  533.    1                          if (i == 0 && mypex != 0) {
+  534.    1                              p += 2;
+  535.    1                              continue;
+  536.    1                          }
+  537.    1                          if (i == 0 || i == nzx)
+  538.  + 1                              slavepoints.push_back(p++);
+  539.    1                          else {
+  540.  + 1                              slavepoints.push_back(p++);
+  541.  + 1                              slavepoints.push_back(p++);
+  542.    1                          }
+  543.    1------------>         }  // for i
+  544.  +                        slavemstrpes.push_back(mstrpe);
+  545.  + I                      slavemstrcounts.push_back(slavepoints.size() - oldsize);
+  546.                       }  // if mypey != 0
+  547.                       // slave points with master to left
+  548.                       if (mypex != 0) {
+  549.                           int mstrpe = mype - 1;
+  550.    I                      int oldsize = slavepoints.size();
+  551.  + 1------------<         for (int j = 0; j < npy; ++j) {
+  552.    1                          if (j == 0 && mypey != 0) continue;
+  553.    1 I                        int p = pbase[j];
+  554.    1                          if (j == 0 || j == nzy)
+  555.  + 1                              slavepoints.push_back(p++);
+  556.    1                          else {
+  557.  + 1                              slavepoints.push_back(p++);
+  558.  + 1                              slavepoints.push_back(p++);
+  559.    1                         }
+  560.    1------------>         }  // for j
+  561.  +                        slavemstrpes.push_back(mstrpe);
+  562.  + I                      slavemstrcounts.push_back(slavepoints.size() - oldsize);
+  563.                       }  // if mypex != 0
+  564.                   
+  565.                       // enumerate master points
+  566.                       // master points with slave to right
+  567.                       if (mypex != numpex - 1) {
+  568.                           int slvpe = mype + 1;
+  569.    I                      int oldsize = masterpoints.size();
+  570.  + 1------------<         for (int j = 0; j < npy; ++j) {
+  571.    1                          if (j == 0 && mypey != 0) continue;
+  572.    1 I                        int p = (j == nzy ? np : pbase[j+1]);
+  573.    1                          if (j == 0 || j == nzy)
+  574.  + 1                              masterpoints.push_back(p-1);
+  575.    1                          else {
+  576.  + 1                              masterpoints.push_back(p-2);
+  577.  + 1                              masterpoints.push_back(p-1);
+  578.    1                         }
+  579.    1------------>         }
+  580.  +                        masterslvpes.push_back(slvpe);
+  581.  + I                      masterslvcounts.push_back(masterpoints.size() - oldsize);
+  582.                       }  // if mypex != numpex - 1
+  583.                       // master points with slave above
+  584.                       if (mypey != numpey - 1) {
+  585.    I                      int p = pbase[nzy];
+  586.                           int slvpe = mype + numpex;
+  587.    I                      int oldsize = masterpoints.size();
+  588.  + 1------------<         for (int i = 0; i < npx; ++i) {
+  589.    1                          if (i == 0 && mypex != 0) {
+  590.    1                              p++;
+  591.    1                              continue;
+  592.    1                          }
+  593.    1                          if (i == 0 || i == nzx)
+  594.  + 1                              masterpoints.push_back(p++);
+  595.    1                          else {
+  596.  + 1                              masterpoints.push_back(p++);
+  597.  + 1                              masterpoints.push_back(p++);
+  598.    1                          }
+  599.    1------------>         }  // for i
+  600.  +                        masterslvpes.push_back(slvpe);
+  601.  + I                      masterslvcounts.push_back(masterpoints.size() - oldsize);
+  602.                       }  // if mypey != numpey - 1
+  603.                       // master points with slave at upper right
+  604.                       if (mypex != numpex - 1 && mypey != numpey - 1) {
+  605.                           int slvpe = mype + numpex + 1;
+  606.  +                        masterpoints.push_back(np-2);
+  607.  +                        masterpoints.push_back(np-1);
+  608.  +                        masterslvpes.push_back(slvpe);
+  609.  +                        masterslvcounts.push_back(2);
+  610.                       }
+  611.                   
+  612.                   }
+  613.                   
+  614.                   
+  615.                   void GenMesh::calcNumPE() {
+  616.                   
+  617.                       using Parallel::numpe;
+  618.                       using Parallel::mype;
+  619.                   
+  620.                       // pick numpex, numpey such that PE blocks are as close to square
+  621.                       // as possible
+  622.                       // we would like:  gnzx / numpex == gnzy / numpey,
+  623.                       // where numpex * numpey = numpe (total number of PEs available)
+  624.                       // this solves to:  numpex = sqrt(numpe * gnzx / gnzy)
+  625.                       // we compute this, assuming gnzx <= gnzy (swap if necessary)
+  626.                       double nx = static_cast<double>(gnzx);
+  627.                       double ny = static_cast<double>(gnzy);
+  628.                       bool swapflag = (nx > ny);
+  629.    I                  if (swapflag) swap(nx, ny);
+  630.                       double n = sqrt(numpe * nx / ny);
+  631.                       // need to constrain n to be an integer with numpe % n == 0
+  632.                       // try rounding n both up and down
+  633.                       int n1 = floor(n + 1.e-12);
+  634.    I                  n1 = max(n1, 1);
+  635.  + 1-----------<>     while (numpe % n1 != 0) --n1;
+  636.                       int n2 = ceil(n - 1.e-12);
+  637.  + 1-----------<>     while (numpe % n2 != 0) ++n2;
+  638.                       // pick whichever of n1 and n2 gives blocks closest to square,
+  639.                       // i.e. gives the shortest long side
+  640.    I                  double longside1 = max(nx / n1, ny / (numpe/n1));
+  641.    I                  double longside2 = max(nx / n2, ny / (numpe/n2));
+  642.                       numpex = (longside1 <= longside2 ? n1 : n2);
+  643.                       numpey = numpe / numpex;
+  644.    I                  if (swapflag) swap(numpex, numpey);
+  645.                       mypex = mype % numpex;
+  646.                       mypey = mype / numpex;
+  647.                   
+  648.                   }
+  649.                   
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 5969, Column = 18 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:95) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 5969, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6254 CC: VECTOR <unnamed>, File = stl_uninitialized.h, Line = 579 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 579.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 579, Column = 18 
+  Tiny leaf routine "__normal_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:780) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:27) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:28) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "~double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:29) was textually inlined.
+
+CC-6337 CC: VECTOR reserve, File = vector.tcc, Line = 74 
+  A loop was not vectorized because it contains unsupported conditional constructs near line 74.
+
+CC-6002 CC: SCALAR reserve, File = vector.tcc, Line = 78 
+  A loop was eliminated by optimization.
+
+CC-3001 CC: IPA <unnamed>, File = vector.tcc, Line = 428, Column = 15 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:131) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = vector.tcc, Line = 428, Column = 15 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = vector.tcc, Line = 428, Column = 15 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:99) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = vector.tcc, Line = 428, Column = 15 
+  Tiny leaf routine "__normal_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:780) was textually inlined.
+
+CC-6337 CC: VECTOR _M_realloc_insert<type>, File = vector.tcc, Line = 445 
+  A loop was not vectorized because it contains unsupported conditional constructs near line 445.
+
+CC-6337 CC: VECTOR _M_realloc_insert<type>, File = vector.tcc, Line = 452 
+  A loop was not vectorized because it contains unsupported conditional constructs near line 452.
+
+CC-6002 CC: SCALAR _M_realloc_insert<type>, File = vector.tcc, Line = 468 
+  A loop was eliminated by optimization.
+
+CC-3021 CC: IPA __sti___edfb250b_4071f05b, File = iostream, Line = 74, Column = 25 
+  "Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 27, Column = 40 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "getString" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 31, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 32, Column = 5 
+  "empty" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 34, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 34, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 35, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 37, Column = 5 
+  Tiny routine "operator!=<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6081) was textually inlined.  NOT INLINED:  compare.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 37, Column = 5 
+  Tiny routine "operator!=<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6081) was textually inlined.  NOT INLINED:  compare.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 37, Column = 5 
+  Tiny routine "operator!=<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6081) was textually inlined.  NOT INLINED:  compare.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 41, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 41, Column = 13 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 41, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 42, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  "getDoubleList" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 44, Column = 20 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA <unnamed>, File = GenMesh.cc, Line = 44, Column = 20 
+  Tiny routine "~GenMesh"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:81) was textually inlined.  NOT INLINED: 
+  ~basic_string.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 46, Column = 5 
+  Tiny routine "empty"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:894) was textually inlined and flattened.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 48, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 48, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 49, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 51, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 53, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 53, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 54, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 57, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 58, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 58, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 59, Column = 5 
+  Tiny routine "operator!=<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6081) was textually inlined.  NOT INLINED:  compare.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 60, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 60, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 63, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 63, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 65, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 65, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 69, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 69, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 70, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA GenMesh, File = GenMesh.cc, Line = 72, Column = 5 
+  Tiny routine "operator==<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6043) was textually inlined.  NOT INLINED:  compare.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 74, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 74, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA GenMesh, File = GenMesh.cc, Line = 75, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA ~GenMesh, File = GenMesh.cc, Line = 81, Column = 22 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3171 CC: IPA generate, File = GenMesh.cc, Line = 97, Column = 5 
+  "calcNumPE"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:615) was not inlined because it is not in the body of a
+  loop.
+
+CC-3001 CC: IPA generate, File = GenMesh.cc, Line = 106, Column = 5 
+  Tiny routine "operator==<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6043) was textually inlined.  NOT INLINED:  compare.
+
+CC-3118 CC: IPA generate, File = GenMesh.cc, Line = 107, Column = 9 
+  "generatePie"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:251) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generate, File = GenMesh.cc, Line = 110, Column = 10 
+  Tiny routine "operator==<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6043) was textually inlined.  NOT INLINED:  compare.
+
+CC-3118 CC: IPA generate, File = GenMesh.cc, Line = 111, Column = 9 
+  "generateRect"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:122) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generate, File = GenMesh.cc, Line = 114, Column = 10 
+  Tiny routine "operator==<char, char_traits<char>,
+  allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:6043) was textually inlined.  NOT INLINED:  compare.
+
+CC-3118 CC: IPA generate, File = GenMesh.cc, Line = 115, Column = 9 
+  "generateHex"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:415) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 143, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 146 
+  A loop was not vectorized because it contains a call to function "std::vector<double2, std::allocator<double2>>::push_back" on
+  line 150.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 148 
+  A loop was not vectorized because it contains a call to function "std::vector<double2, std::allocator<double2>>::push_back" on
+  line 150.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 150, Column = 13 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 150, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 155, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 156, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 157, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 158 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 160.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 159 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 160.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 160, Column = 13 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 160, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 161, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 163, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 164, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 165, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 166, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 173, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 174, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 181, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 182, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 183, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 188, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 190 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 192.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 192, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 195, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 196, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 196, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 201, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 203 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 205.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 205, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 208, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 209, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 209, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 216, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 218 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 220.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 220, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 223, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 224, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 224, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 229, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateRect, File = GenMesh.cc, Line = 231 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 233.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 233, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 236, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateRect, File = GenMesh.cc, Line = 237, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 237, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 243, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 244, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateRect, File = GenMesh.cc, Line = 245, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 272, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 274, Column = 12 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 274, Column = 12 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 274, Column = 12 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 274, Column = 12 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:139) was textually inlined.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 275 
+  A loop was not vectorized because it contains a call to function "std::vector<double2, std::allocator<double2>>::push_back" on
+  line 277.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 277, Column = 13 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 277, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 281 
+  A loop was not vectorized because it contains a call to function "std::vector<double2, std::allocator<double2>>::push_back" on
+  line 285.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 285, Column = 13 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 285, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 290, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 291, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 292, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 293 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 295.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 294 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 295.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 295, Column = 13 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 295, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 299, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 300, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 303, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 304, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 305, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 307, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 308, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 315, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 316, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 323, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 324, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 325, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 330, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 332 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 334.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 334, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 337, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 338, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 338, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 343, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 345, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 349, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 350, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 355 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 356.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 356, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 359, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 360, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 360, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 367, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 370, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 373 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 374.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 374, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 377, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 378, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 378, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 381 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 382.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 382, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 383, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 384, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 391, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generatePie, File = GenMesh.cc, Line = 394 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 396.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 396, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 399, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generatePie, File = GenMesh.cc, Line = 400, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 400, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 407, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 408, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generatePie, File = GenMesh.cc, Line = 409, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 435, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6254 CC: VECTOR generateHex, File = GenMesh.cc, Line = 439 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 439.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 439, Column = 17 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:131) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 439, Column = 17 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:415) was textually inlined.  NOT INLINED: 
+  __throw_bad_alloc : operator new.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 439, Column = 17 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:139) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 440 
+  A loop was not vectorized because it contains a call to function "std::vector<double2, std::allocator<double2>>::push_back" on
+  line 452.
+
+CC-6005 CC: SCALAR generateHex, File = GenMesh.cc, Line = 440 
+  A loop was unrolled 2 times.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 441, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 441, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 444, Column = 9 
+  Tiny leaf routine "min<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:195) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 444, Column = 9 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:219) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 445 
+  A loop was not vectorized because it contains a call to function "std::vector<double2, std::allocator<double2>>::push_back" on
+  line 452.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 448, Column = 13 
+  Tiny leaf routine "min<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:195) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 448, Column = 13 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:219) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 450, Column = 17 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 450, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 452, Column = 17 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 452, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 455, Column = 17 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 455, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 458, Column = 17 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 458, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 460, Column = 17 
+  Tiny routine "make_double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:68) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 460, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 465, Column = 12 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 468, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 469, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 470, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 471 
+  A loop was not vectorized because it contains a call to function "operator new " on line 481.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 473, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 474, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 479 
+  A loop was not vectorized because it contains a call to function "operator new " on line 481.
+
+CC-6254 CC: VECTOR generateHex, File = GenMesh.cc, Line = 481 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 481.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 481, Column = 25 
+  Tiny leaf routine "allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:131) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 481, Column = 25 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:415) was textually inlined.  NOT INLINED: 
+  operator new.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 481, Column = 25 
+  Tiny leaf routine "~allocator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:139) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 482, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 483, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 483, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 484, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 484, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 485, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 486, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 486, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 487, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 487, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 489, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 490, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 490, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 491, Column = 37 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 491, Column = 37 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:833) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 491, Column = 37 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3172 CC: IPA generateHex, File = GenMesh.cc, Line = 491, Column = 37 
+  "erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1317) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 492, Column = 17 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 492, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:833) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 492, Column = 17 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3172 CC: IPA generateHex, File = GenMesh.cc, Line = 492, Column = 17 
+  "erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1317) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 495, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 496, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 496, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 497, Column = 17 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 497, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:833) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 497, Column = 17 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3172 CC: IPA generateHex, File = GenMesh.cc, Line = 497, Column = 17 
+  "erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1317) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 498, Column = 30 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 498, Column = 30 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:833) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 498, Column = 30 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3172 CC: IPA generateHex, File = GenMesh.cc, Line = 498, Column = 30 
+  "erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1317) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 501, Column = 17 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 501, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:833) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 501, Column = 17 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3172 CC: IPA generateHex, File = GenMesh.cc, Line = 501, Column = 17 
+  "erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1317) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 503, Column = 17 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 503, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:833) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 503, Column = 17 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3172 CC: IPA generateHex, File = GenMesh.cc, Line = 503, Column = 17 
+  "erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1317) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 504, Column = 13 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 504, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 505, Column = 13 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 505, Column = 13 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 506, Column = 13 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 506, Column = 13 
+  Tiny routine "__normal_iterator<pointer>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:785) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 506, Column = 13 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 506, Column = 13 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:716) was textually inlined and flattened.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 506, Column = 13 
+  "insert<iterator, void>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1266) was not inlined because the call site
+  will not flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 507, Column = 9 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 510, Column = 21 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 513, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 515, Column = 5 
+  "reserve"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:67) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 522, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 523, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 524, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 525, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 531, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 532 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 540.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 538, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 540, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 541, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 544, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 545, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 545, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 550, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 551 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 557.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 553, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 555, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 557, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 558, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 561, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 562, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 562, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 569, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 570 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 576.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 572, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 574, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 576, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 577, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 580, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 581, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 581, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 585, Column = 15 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:930) was textually inlined.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 587, Column = 21 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-6287 CC: VECTOR generateHex, File = GenMesh.cc, Line = 588 
+  A loop was not vectorized because it contains a call to function "std::vector<int, std::allocator<int>>::push_back" on line 596.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 594, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 596, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 597, Column = 17 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 600, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA generateHex, File = GenMesh.cc, Line = 601, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:805) was textually inlined.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 601, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 606, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 607, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 608, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3118 CC: IPA generateHex, File = GenMesh.cc, Line = 609, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:1090) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA calcNumPE, File = GenMesh.cc, Line = 629, Column = 19 
+  Tiny routine "swap<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:182) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcNumPE, File = GenMesh.cc, Line = 634, Column = 5 
+  Tiny leaf routine "max<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:219) was textually inlined.
+
+CC-6254 CC: VECTOR calcNumPE, File = GenMesh.cc, Line = 635 
+  A loop was not vectorized because a recurrence was found on "n1" at line 635.
+
+CC-6254 CC: VECTOR calcNumPE, File = GenMesh.cc, Line = 637 
+  A loop was not vectorized because a recurrence was found on "n2" at line 637.
+
+CC-3001 CC: IPA calcNumPE, File = GenMesh.cc, Line = 640, Column = 22 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:219) was textually inlined.
+
+CC-3001 CC: IPA calcNumPE, File = GenMesh.cc, Line = 641, Column = 22 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:219) was textually inlined.
+
+CC-3001 CC: IPA calcNumPE, File = GenMesh.cc, Line = 644, Column = 19 
+  Tiny routine "swap<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/GenMesh.cc:182) was textually inlined and flattened.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

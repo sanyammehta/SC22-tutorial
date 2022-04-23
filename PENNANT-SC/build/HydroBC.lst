@@ -1,0 +1,215 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/HydroBC.o src/HydroBC.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc
+Date     : 06/04/2020  18:09:46
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.                   /*
+    2.                    * HydroBC.cc
+    3.                    *
+    4.                    *  Created on: Jan 13, 2012
+    5.                    *      Author: cferenba
+    6.                    *
+    7.                    * Copyright (c) 2012, Triad National Security, LLC.
+    8.                    * All rights reserved.
+    9.                    * Use of this source code is governed by a BSD-style open-source
+   10.                    * license; see top-level LICENSE file for full license text.
+   11.                    */
+   12.                   
+   13.                   #include "HydroBC.hh"
+   14.                   
+   15.                   #include "Memory.hh"
+   16.                   #include "Mesh.hh"
+   17.                   
+   18.                   using namespace std;
+   19.                   
+   20.                   
+   21.                   HydroBC::HydroBC(
+   22.                           Mesh* msh,
+   23.                           const double2 v,
+   24.                           const vector<int>& mbp)
+   25.    Ip  I              : mesh(msh), numb(mbp.size()), vfix(v) {
+   26.                   
+   27.    I                  mapbp = Memory::alloc<int>(numb);
+   28.    I                  copy(mbp.begin(), mbp.end(), mapbp);
+   29.                   
+   30.  +                    mesh->getPlaneChunks(numb, mapbp, pchbfirst, pchblast);
+   31.                   
+   32.                   }
+   33.                   
+   34.                   
+   35.    Ip             HydroBC::~HydroBC() {}
+   36.                   
+   37.                   
+   38.                   void HydroBC::applyFixedBC(
+   39.                           double2* pu,
+   40.                           double2* pf,
+   41.                           const int bfirst,
+   42.                           const int blast) {
+   43.                   
+   44.                       #pragma ivdep
+   45.  + VFr2---------<     for (int b = bfirst; b < blast; ++b) {
+   46.    VFr2                   int p = mapbp[b];
+   47.    VFr2           
+   48.    VFr2 I                 pu[p] = project(pu[p], vfix);
+   49.    VFr2 I                 pf[p] = project(pf[p], vfix);
+   50.    VFr2--------->     }
+   51.                   
+   52.                   }
+   53.                   
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:27) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:28) was textually inlined.
+
+CC-3001 CC: IPA HydroBC, File = basic_string.h, Line = 6571, Column = 15 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA HydroBC, File = basic_string.h, Line = 6571, Column = 15 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3118 CC: IPA <unnamed>, File = basic_string.h, Line = 6571, Column = 15 
+  "HydroBC"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:21) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 6571, Column = 15 
+  Tiny routine "~HydroBC"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:35) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 6571, Column = 15 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:95) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = basic_string.h, Line = 6571, Column = 15 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 25, Column = 18 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:805) was textually inlined.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 25, Column = 36 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:28) was textually inlined.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 25, Column = 44 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 25, Column = 44 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 27, Column = 5 
+  Tiny leaf routine "alloc<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:30) was textually inlined.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 28, Column = 5 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:707) was textually inlined and flattened.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 28, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:725) was textually inlined and flattened.
+
+CC-3001 CC: IPA HydroBC, File = HydroBC.cc, Line = 28, Column = 5 
+  Tiny routine "copy<const_iterator, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:446) was textually inlined
+  and flattened.
+
+CC-3021 CC: IPA HydroBC, File = HydroBC.cc, Line = 30, Column = 5 
+  "getPlaneChunks" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~HydroBC, File = HydroBC.cc, Line = 35, Column = 22 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~HydroBC, File = HydroBC.cc, Line = 35, Column = 22 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6005 CC: SCALAR applyFixedBC, File = HydroBC.cc, Line = 45 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR applyFixedBC, File = HydroBC.cc, Line = 45 
+  A loop was vectorized.
+
+CC-3182 CC: IPA applyFixedBC, File = HydroBC.cc, Line = 45, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA applyFixedBC, File = HydroBC.cc, Line = 48, Column = 9 
+  Tiny routine "project"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:178) was textually inlined and flattened.
+
+CC-3001 CC: IPA applyFixedBC, File = HydroBC.cc, Line = 48, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:31) was textually inlined.
+
+CC-3001 CC: IPA applyFixedBC, File = HydroBC.cc, Line = 49, Column = 9 
+  Tiny routine "project"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:178) was textually inlined and flattened.
+
+CC-3001 CC: IPA applyFixedBC, File = HydroBC.cc, Line = 49, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/HydroBC.cc:31) was textually inlined.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

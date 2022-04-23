@@ -1,0 +1,1984 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/Hydro.o src/Hydro.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc
+Date     : 06/04/2020  18:09:51
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.                          /*
+    2.                           * Hydro.cc
+    3.                           *
+    4.                           *  Created on: Dec 22, 2011
+    5.                           *      Author: cferenba
+    6.                           *
+    7.                           * Copyright (c) 2012, Triad National Security, LLC.
+    8.                           * All rights reserved.
+    9.                           * Use of this source code is governed by a BSD-style open-source
+   10.                           * license; see top-level LICENSE file for full license text.
+   11.                           */
+   12.                          
+   13.                          #include "Hydro.hh"
+   14.                          
+   15.                          #include <string>
+   16.                          #include <vector>
+   17.                          #include <cmath>
+   18.                          #include <cstdio>
+   19.                          #include <cstring>
+   20.                          #include <algorithm>
+   21.                          #include <iostream>
+   22.                          #include <iomanip>
+   23.                          
+   24.                          #include "Parallel.hh"
+   25.                          #include "Memory.hh"
+   26.                          #include "InputFile.hh"
+   27.                          #include "Mesh.hh"
+   28.                          #include "PolyGas.hh"
+   29.                          #include "TTS.hh"
+   30.                          #include "QCS.hh"
+   31.                          #include "HydroBC.hh"
+   32.                          
+   33.                          using namespace std;
+   34.                          
+   35.                          
+   36.       Ip                 Hydro::Hydro(const InputFile* inp, Mesh* m) : mesh(m) {
+   37.  +                           cfl = inp->getDouble("cfl", 0.6);
+   38.  +                           cflv = inp->getDouble("cflv", 0.1);
+   39.  +                           rinit = inp->getDouble("rinit", 1.);
+   40.  +                           einit = inp->getDouble("einit", 0.);
+   41.  +                           rinitsub = inp->getDouble("rinitsub", 1.);
+   42.  +                           einitsub = inp->getDouble("einitsub", 0.);
+   43.  +                           uinitradial = inp->getDouble("uinitradial", 0.);
+   44.  +    Ip                     bcx = inp->getDoubleList("bcx", vector<double>());
+   45.  +    Ip                     bcy = inp->getDoubleList("bcy", vector<double>());
+   46.                          
+   47.  +                           pgas = new PolyGas(inp, this);
+   48.  +                           tts = new TTS(inp, this);
+   49.  +                           qcs = new QCS(inp, this);
+   50.                          
+   51.       I                      const double2 vfixx = double2(1., 0.);
+   52.  +    I                      const double2 vfixy = double2(0., 1.);
+   53.  +    1 I--------------<     for (int i = 0; i < bcx.size(); ++i)
+   54.  +    1 Ip------------->         bcs.push_back(new HydroBC(mesh, vfixx, mesh->getXPlane(bcx[i])));
+   55.  +    1 I--------------<     for (int i = 0; i < bcy.size(); ++i)
+   56.  +    1 Ip------------->         bcs.push_back(new HydroBC(mesh, vfixy, mesh->getYPlane(bcy[i])));
+   57.                          
+   58.  +                           init();
+   59.                          }
+   60.                          
+   61.                          
+   62.                          Hydro::~Hydro() {
+   63.                          
+   64.  +    I                      delete tts;
+   65.  +    I                      delete qcs;
+   66.  +    1 I--------------<     for (int i = 0; i < bcs.size(); ++i) {
+   67.  +    1 I                        delete bcs[i];
+   68.       1---------------->     }
+   69.       Ip                 }
+   70.                          
+   71.                          
+   72.                          void Hydro::init() {
+   73.                          
+   74.                              const int numpch = mesh->numpch;
+   75.                              const int numzch = mesh->numzch;
+   76.                              const int nump = mesh->nump;
+   77.                              const int numz = mesh->numz;
+   78.                              const int nums = mesh->nums;
+   79.                          
+   80.                              const double2* zx = mesh->zx;
+   81.                              const double* zvol = mesh->zvol;
+   82.                          
+   83.                              // allocate arrays
+   84.       I                      pu = Memory::alloc<double2>(nump);
+   85.       I                      pu0 = Memory::alloc<double2>(nump);
+   86.       I                      pap = Memory::alloc<double2>(nump);
+   87.       I                      pf = Memory::alloc<double2>(nump);
+   88.       I                      pmaswt = Memory::alloc<double>(nump);
+   89.       I                      cmaswt = Memory::alloc<double>(nums);
+   90.       I                      zm = Memory::alloc<double>(numz);
+   91.       I                      zr = Memory::alloc<double>(numz);
+   92.       I                      zrp = Memory::alloc<double>(numz);
+   93.       I                      ze = Memory::alloc<double>(numz);
+   94.       I                      zetot = Memory::alloc<double>(numz);
+   95.       I                      zw = Memory::alloc<double>(numz);
+   96.       I                      zwrate = Memory::alloc<double>(numz);
+   97.       I                      zp = Memory::alloc<double>(numz);
+   98.       I                      zss = Memory::alloc<double>(numz);
+   99.       I                      zdu = Memory::alloc<double>(numz);
+  100.       I                      sfp = Memory::alloc<double2>(nums);
+  101.       I                      sfq = Memory::alloc<double2>(nums);
+  102.       I                      sft = Memory::alloc<double2>(nums);
+  103.       I                      cftot = Memory::alloc<double2>(nums);
+  104.                          
+  105.                              // initialize hydro vars
+  106.                              #pragma omp parallel for schedule(static)
+  107.  + M-<mF---------------<     for (int zch = 0; zch < numzch; ++zch) {
+  108.    M  mF I                       int zfirst = mesh->zchzfirst[zch];
+  109.    M  mF I                       int zlast = mesh->zchzlast[zch];
+  110.    M  mF                 
+  111.    M  mF Vr4 I--------<>         fill(&zr[zfirst], &zr[zlast], rinit);
+  112.    M  mF Vr4 I--------<>         fill(&ze[zfirst], &ze[zlast], einit);
+  113.    M  mF Vr4 I--------<>         fill(&zwrate[zfirst], &zwrate[zlast], 0.);
+  114.    M  mF                 
+  115.    M  mF                         const vector<double>& subrgn = mesh->subregion;
+  116.    M  mF I                       if (!subrgn.empty()) {
+  117.    M  mF                             const double eps = 1.e-12;
+  118.    M  mF                             #pragma ivdep
+  119.  + M  mF VF------------<             for (int z = zfirst; z < zlast; ++z) {
+  120.    M  mF VF I                            if (zx[z].x > (subrgn[0] - eps) &&
+  121.    M  mF VF                                  zx[z].x < (subrgn[1] + eps) &&
+  122.    M  mF VF                                  zx[z].y > (subrgn[2] - eps) &&
+  123.    M  mF VF                                  zx[z].y < (subrgn[3] + eps)) {
+  124.    M  mF VF                                  zr[z] = rinitsub;
+  125.    M  mF VF                                  ze[z] = einitsub;
+  126.    M  mF VF                              }
+  127.    M  mF VF------------>             }
+  128.    M  mF                         }
+  129.    M  mF                 
+  130.    M  mF                         #pragma ivdep
+  131.    M  mF Vr4-----------<         for (int z = zfirst; z < zlast; ++z) {
+  132.    M  mF Vr4                         zm[z] = zr[z] * zvol[z];
+  133.    M  mF Vr4                         zetot[z] = ze[z] * zm[z];
+  134.    M  mF Vr4----------->         }
+  135.    M  mF--------------->     }  // for sch
+  136.    M                     
+  137.    M                         #pragma omp parallel for schedule(static)
+  138.  + M  mF---------------<     for (int pch = 0; pch < numpch; ++pch) {
+  139.    M  mF I                       int pfirst = mesh->pchpfirst[pch];
+  140.    M  mF I                       int plast = mesh->pchplast[pch];
+  141.    M  mF                         if (uinitradial != 0.)
+  142.  + M  mF V I----------<>             initRadialVel(uinitradial, pfirst, plast);
+  143.    M  mF                         else
+  144.    M  mF Vr2 I--------<>             fill(&pu[pfirst], &pu[plast], double2(0., 0.));
+  145.    M->mF--------------->     }  // for pch
+  146.                          
+  147.       Ip                     resetDtHydro();
+  148.                          
+  149.                          }
+  150.                          
+  151.                          
+  152.                          void Hydro::initRadialVel(
+  153.                                  const double vel,
+  154.                                  const int pfirst,
+  155.                                  const int plast) {
+  156.                              const double2* px = mesh->px;
+  157.                              const double eps = 1.e-12;
+  158.                          
+  159.                              #pragma ivdep
+  160.  +    VF---------------<     for (int p = pfirst; p < plast; ++p) {
+  161.       VF I                       double pmag = length(px[p]);
+  162.       VF                         if (pmag > eps)
+  163.       VF I                           pu[p] = vel * px[p] / pmag;
+  164.       VF                         else
+  165.       VF I                           pu[p] = double2(0., 0.);
+  166.       VF--------------->     }
+  167.                          }
+  168.                          
+  169.                          
+  170.                          void Hydro::doCycle(
+  171.                                      const double dt) {
+  172.                          
+  173.                              const int numpch = mesh->numpch;
+  174.                              const int numsch = mesh->numsch;
+  175.                              double2* px = mesh->px;
+  176.                              double2* ex = mesh->ex;
+  177.                              double2* zx = mesh->zx;
+  178.                              double* sarea = mesh->sarea;
+  179.                              double* svol = mesh->svol;
+  180.                              double* zarea = mesh->zarea;
+  181.                              double* zvol = mesh->zvol;
+  182.                              double* sareap = mesh->sareap;
+  183.                              double* svolp = mesh->svolp;
+  184.                              double* zareap = mesh->zareap;
+  185.                              double* zvolp = mesh->zvolp;
+  186.                              double* zvol0 = mesh->zvol0;
+  187.                              double2* ssurfp = mesh->ssurfp;
+  188.                              double* elen = mesh->elen;
+  189.                              double2* px0 = mesh->px0;
+  190.                              double2* pxp = mesh->pxp;
+  191.                              double2* exp = mesh->exp;
+  192.                              double2* zxp = mesh->zxp;
+  193.                              double* smf = mesh->smf;
+  194.                              double* zdl = mesh->zdl;
+  195.                          
+  196.                              // Begin hydro cycle
+  197.                              #pragma omp parallel for schedule(static)
+  198.  + M-<mF---------------<     for (int pch = 0; pch < numpch; ++pch) {
+  199.    M  mF I                       int pfirst = mesh->pchpfirst[pch];
+  200.    M  mF I                       int plast = mesh->pchplast[pch];
+  201.    M  mF                 
+  202.    M  mF                         // save off point variable values from previous cycle
+  203.    M  mF Vcr4 I-------<>         copy(&px[pfirst], &px[plast], &px0[pfirst]);
+  204.    M  mF Vcr4 I-------<>         copy(&pu[pfirst], &pu[plast], &pu0[pfirst]);
+  205.    M  mF                 
+  206.    M  mF                         // ===== Predictor step =====
+  207.    M  mF                         // 1. advance mesh to center of time step
+  208.    M  mF Vr2 I--------<>         advPosHalf(px0, pu0, dt, pxp, pfirst, plast);
+  209.    M  mF--------------->     } // for pch
+  210.    M                     
+  211.    M                         #pragma omp parallel for schedule(static)
+  212.  + M  m----------------<     for (int sch = 0; sch < numsch; ++sch) {
+  213.    M  m I                        int sfirst = mesh->schsfirst[sch];
+  214.    M  m I                        int slast = mesh->schslast[sch];
+  215.    M  m I                        int zfirst = mesh->schzfirst[sch];
+  216.    M  m I                        int zlast = mesh->schzlast[sch];
+  217.    M  m                  
+  218.    M  m                          // save off zone variable values from previous cycle
+  219.    M  m I                        copy(&zvol[zfirst], &zvol[zlast], &zvol0[zfirst]);
+  220.    M  m                  
+  221.    M  m                          // 1a. compute new mesh geometry
+  222.  + M  m                          mesh->calcCtrs(pxp, exp, zxp, sfirst, slast);
+  223.  + M  m                          mesh->calcVols(pxp, zxp, sareap, svolp, zareap, zvolp,
+  224.    M  m                                  sfirst, slast);
+  225.  + M  m                          mesh->calcSurfVecs(zxp, exp, ssurfp, sfirst, slast);
+  226.  + M  m                          mesh->calcEdgeLen(pxp, elen, sfirst, slast);
+  227.  + M  m                          mesh->calcCharLen(sareap, zdl, sfirst, slast);
+  228.    M  m                  
+  229.    M  m                          // 2. compute point masses
+  230.    M  m Vr4 I---------<>         calcRho(zm, zvolp, zrp, zfirst, zlast);
+  231.    M  m Vr2 I---------<>         calcCrnrMass(zrp, zareap, smf, cmaswt, sfirst, slast);
+  232.    M  m                  
+  233.    M  m                          // 3. compute material state (half-advanced)
+  234.  + M  m                          pgas->calcStateAtHalf(zr, zvolp, zvol0, ze, zwrate, zm, dt,
+  235.    M  m                                  zp, zss, zfirst, zlast);
+  236.    M  m                  
+  237.    M  m                          // 4. compute forces
+  238.  + M  m                          pgas->calcForce(zp, ssurfp, sfp, sfirst, slast);
+  239.  + M  m                          tts->calcForce(zareap, zrp, zss, sareap, smf, ssurfp, sft,
+  240.    M  m                                  sfirst, slast);
+  241.  + M  m                          qcs->calcForce(sfq, sfirst, slast);
+  242.    M  m Vr2 I---------<>         sumCrnrForce(sfp, sfq, sft, cftot, sfirst, slast);
+  243.    M->m---------------->     }  // for sch
+  244.  +                           mesh->checkBadSides();
+  245.                          
+  246.                              // sum corner masses, forces to points
+  247.  +                           mesh->sumToPoints(cmaswt, pmaswt);
+  248.  +                           mesh->sumToPoints(cftot, pf);
+  249.                          
+  250.                              #pragma omp parallel for schedule(static)
+  251.  +    Mm---------------<     for (int pch = 0; pch < numpch; ++pch) {
+  252.       Mm I                       int pfirst = mesh->pchpfirst[pch];
+  253.       Mm I                       int plast = mesh->pchplast[pch];
+  254.       Mm                 
+  255.       Mm                         // 4a. apply boundary conditions
+  256.  +    Mm 2 I-----------<         for (int i = 0; i < bcs.size(); ++i) {
+  257.       Mm 2 I                         int bfirst = bcs[i]->pchbfirst[pch];
+  258.       Mm 2 I                         int blast = bcs[i]->pchblast[pch];
+  259.  +    Mm 2 I                         bcs[i]->applyFixedBC(pu0, pf, bfirst, blast);
+  260.       Mm 2------------->         }
+  261.       Mm                 
+  262.       Mm                         // 5. compute accelerations
+  263.       Mm Vr2 I--------<>         calcAccel(pf, pmaswt, pap, pfirst, plast);
+  264.       Mm                 
+  265.       Mm                         // ===== Corrector step =====
+  266.       Mm                         // 6. advance mesh to end of time step
+  267.  +    Mm                         advPosFull(px0, pu0, pap, dt, px, pu, pfirst, plast);
+  268.       Mm--------------->     }  // for pch
+  269.                          
+  270.       Ip                     resetDtHydro();
+  271.                          
+  272.                              #pragma omp parallel for schedule(static)
+  273.  +    Mm---------------<     for (int sch = 0; sch < numsch; ++sch) {
+  274.       Mm I                       int sfirst = mesh->schsfirst[sch];
+  275.       Mm I                       int slast = mesh->schslast[sch];
+  276.       Mm I                       int zfirst = mesh->schzfirst[sch];
+  277.       Mm I                       int zlast = mesh->schzlast[sch];
+  278.       Mm                 
+  279.       Mm                         // 6a. compute new mesh geometry
+  280.  +    Mm                         mesh->calcCtrs(px, ex, zx, sfirst, slast);
+  281.  +    Mm                         mesh->calcVols(px, zx, sarea, svol, zarea, zvol,
+  282.       Mm                                 sfirst, slast);
+  283.       Mm                 
+  284.       Mm                         // 7. compute work
+  285.       Mm Vr4 I--------<>         fill(&zw[zfirst], &zw[zlast], 0.);
+  286.  +    Mm I                       calcWork(sfp, sfq, pu0, pu, pxp, dt, zw, zetot,
+  287.       Mm                                 sfirst, slast);
+  288.       Mm--------------->     }  // for sch
+  289.  +                           mesh->checkBadSides();
+  290.                          
+  291.                              #pragma omp parallel for schedule(static)
+  292.  +    Mm---------------<     for (int zch = 0; zch < mesh->numzch; ++zch) {
+  293.       Mm I                       int zfirst = mesh->zchzfirst[zch];
+  294.       Mm I                       int zlast = mesh->zchzlast[zch];
+  295.       Mm                 
+  296.       Mm                         // 7a. compute work rate
+  297.       Mm Vr4 I--------<>         calcWorkRate(zvol0, zvol, zw, zp, dt, zwrate, zfirst, zlast);
+  298.       Mm                 
+  299.       Mm                         // 8. update state variables
+  300.       Mm Vr4 I--------<>         calcEnergy(zetot, zm, ze, zfirst, zlast);
+  301.       Mm Vr4 I--------<>         calcRho(zm, zvol, zr, zfirst, zlast);
+  302.       Mm                 
+  303.       Mm                         // 9.  compute timestep for next cycle
+  304.  +    Mm r2 Ip--------<>         calcDtHydro(zdl, zvol, zvol0, dt, zfirst, zlast);
+  305.       Mm--------------->     }  // for zch
+  306.                          
+  307.                          }
+  308.                          
+  309.                          
+  310.                          void Hydro::advPosHalf(
+  311.                                  const double2* px0,
+  312.                                  const double2* pu0,
+  313.                                  const double dt,
+  314.                                  double2* pxp,
+  315.                                  const int pfirst,
+  316.                                  const int plast) {
+  317.                          
+  318.                              double dth = 0.5 * dt;
+  319.                          
+  320.                              #pragma ivdep
+  321.  +    VFr2-------------<     for (int p = pfirst; p < plast; ++p) {
+  322.       VFr2 I                     pxp[p] = px0[p] + pu0[p] * dth;
+  323.       VFr2------------->     }
+  324.                          }
+  325.                          
+  326.                          
+  327.                          void Hydro::advPosFull(
+  328.                                  const double2* px0,
+  329.                                  const double2* pu0,
+  330.                                  const double2* pa,
+  331.                                  const double dt,
+  332.                                  double2* px,
+  333.                                  double2* pu,
+  334.                                  const int pfirst,
+  335.                                  const int plast) {
+  336.                          
+  337.                              #pragma ivdep
+  338.  +    VFr2-------------<     for (int p = pfirst; p < plast; ++p) {
+  339.       VFr2 I                     pu[p] = pu0[p] + pa[p] * dt;
+  340.       VFr2 I                     px[p] = px0[p] + 0.5 * (pu[p] + pu0[p]) * dt;
+  341.       VFr2------------->     }
+  342.                          
+  343.                          }
+  344.                          
+  345.                          
+  346.                          void Hydro::calcCrnrMass(
+  347.                                  const double* zr,
+  348.                                  const double* zarea,
+  349.                                  const double* smf,
+  350.                                  double* cmaswt,
+  351.                                  const int sfirst,
+  352.                                  const int slast) {
+  353.                          
+  354.                              #pragma ivdep
+  355.       Vr2--------------<     for (int s = sfirst; s < slast; ++s) {
+  356.       Vr2                        int s3 = mesh->mapss3[s];
+  357.       Vr2                        int z = mesh->mapsz[s];
+  358.       Vr2                
+  359.       Vr2                        double m = zr[z] * zarea[z] * 0.5 * (smf[s] + smf[s3]);
+  360.       Vr2                        cmaswt[s] = m;
+  361.       Vr2-------------->     }
+  362.                          }
+  363.                          
+  364.                          
+  365.                          void Hydro::sumCrnrForce(
+  366.                                  const double2* sf,
+  367.                                  const double2* sf2,
+  368.                                  const double2* sf3,
+  369.                                  double2* cftot,
+  370.                                  const int sfirst,
+  371.                                  const int slast) {
+  372.                          
+  373.                              #pragma ivdep
+  374.  +    VFr2-------------<     for (int s = sfirst; s < slast; ++s) {
+  375.       VFr2                       int s3 = mesh->mapss3[s];
+  376.       VFr2               
+  377.       VFr2 I                     double2 f = (sf[s] + sf2[s] + sf3[s]) -
+  378.       VFr2                                   (sf[s3] + sf2[s3] + sf3[s3]);
+  379.       VFr2 I                     cftot[s] = f;
+  380.       VFr2------------->     }
+  381.                          }
+  382.                          
+  383.                          
+  384.                          void Hydro::calcAccel(
+  385.                                  const double2* pf,
+  386.                                  const double* pmass,
+  387.                                  double2* pa,
+  388.                                  const int pfirst,
+  389.                                  const int plast) {
+  390.                          
+  391.                              const double fuzz = 1.e-99;
+  392.                          
+  393.                              #pragma ivdep
+  394.  +    VFr2-------------<     for (int p = pfirst; p < plast; ++p) {
+  395.       VFr2 I                     pa[p] = pf[p] / max(pmass[p], fuzz);
+  396.       VFr2------------->     }
+  397.                          
+  398.                          }
+  399.                          
+  400.                          
+  401.                          void Hydro::calcRho(
+  402.                                  const double* zm,
+  403.                                  const double* zvol,
+  404.                                  double* zr,
+  405.                                  const int zfirst,
+  406.                                  const int zlast) {
+  407.                          
+  408.                              #pragma ivdep
+  409.       Vr4--------------<     for (int z = zfirst; z < zlast; ++z) {
+  410.       Vr4                        zr[z] = zm[z] / zvol[z];
+  411.       Vr4-------------->     }
+  412.                          
+  413.                          }
+  414.                          
+  415.                          
+  416.                          void Hydro::calcWork(
+  417.                                  const double2* sf,
+  418.                                  const double2* sf2,
+  419.                                  const double2* pu0,
+  420.                                  const double2* pu,
+  421.                                  const double2* px,
+  422.                                  const double dt,
+  423.                                  double* zw,
+  424.                                  double* zetot,
+  425.                                  const int sfirst,
+  426.                                  const int slast) {
+  427.                          
+  428.                              // Compute the work done by finding, for each element/node pair,
+  429.                              //   dwork= force * vavg
+  430.                              // where force is the force of the element on the node
+  431.                              // and vavg is the average velocity of the node over the time period
+  432.                          
+  433.                              const double dth = 0.5 * dt;
+  434.                          
+  435.  +    F----------------<     for (int s = sfirst; s < slast; ++s) {
+  436.       F                          int p1 = mesh->mapsp1[s];
+  437.       F                          int p2 = mesh->mapsp2[s];
+  438.       F                          int z = mesh->mapsz[s];
+  439.       F                  
+  440.       F I                        double2 sftot = sf[s] + sf2[s];
+  441.       F I                        double sd1 = dot( sftot, (pu0[p1] + pu[p1]));
+  442.       F I                        double sd2 = dot(-sftot, (pu0[p2] + pu[p2]));
+  443.       F                          double dwork = -dth * (sd1 * px[p1].x + sd2 * px[p2].x);
+  444.       F                  
+  445.       F                          zetot[z] += dwork;
+  446.       F                          zw[z] += dwork;
+  447.       F                  
+  448.       F---------------->     }
+  449.                          
+  450.                          }
+  451.                          
+  452.                          
+  453.                          void Hydro::calcWorkRate(
+  454.                                  const double* zvol0,
+  455.                                  const double* zvol,
+  456.                                  const double* zw,
+  457.                                  const double* zp,
+  458.                                  const double dt,
+  459.                                  double* zwrate,
+  460.                                  const int zfirst,
+  461.                                  const int zlast) {
+  462.                              double dtinv = 1. / dt;
+  463.                              #pragma ivdep
+  464.       Vr4--------------<     for (int z = zfirst; z < zlast; ++z) {
+  465.       Vr4                        double dvol = zvol[z] - zvol0[z];
+  466.       Vr4                        zwrate[z] = (zw[z] + zp[z] * dvol) * dtinv;
+  467.       Vr4-------------->     }
+  468.                          
+  469.                          }
+  470.                          
+  471.                          
+  472.                          void Hydro::calcEnergy(
+  473.                                  const double* zetot,
+  474.                                  const double* zm,
+  475.                                  double* ze,
+  476.                                  const int zfirst,
+  477.                                  const int zlast) {
+  478.                          
+  479.                              const double fuzz = 1.e-99;
+  480.                              #pragma ivdep
+  481.       Vr4--------------<     for (int z = zfirst; z < zlast; ++z) {
+  482.       Vr4                        ze[z] = zetot[z] / (zm[z] + fuzz);
+  483.       Vr4-------------->     }
+  484.                          
+  485.                          }
+  486.                          
+  487.                          
+  488.                          void Hydro::sumEnergy(
+  489.                                  const double* zetot,
+  490.                                  const double* zarea,
+  491.                                  const double* zvol,
+  492.                                  const double* zm,
+  493.                                  const double* smf,
+  494.                                  const double2* px,
+  495.                                  const double2* pu,
+  496.                                  double& ei,
+  497.                                  double& ek,
+  498.                                  const int zfirst,
+  499.                                  const int zlast,
+  500.                                  const int sfirst,
+  501.                                  const int slast) {
+  502.                          
+  503.                              // compute internal energy
+  504.                              double sumi = 0.; 
+  505.       Vr4--------------<     for (int z = zfirst; z < zlast; ++z) {
+  506.       Vr4                        sumi += zetot[z];
+  507.       Vr4-------------->     }
+  508.                              // multiply by 2\pi for cylindrical geometry
+  509.                              ei += sumi * 2 * M_PI;
+  510.                          
+  511.                              // compute kinetic energy
+  512.                              // in each individual zone:
+  513.                              // zone ke = zone mass * (volume-weighted average of .5 * u ^ 2)
+  514.                              //         = zm sum(c in z) [cvol / zvol * .5 * u ^ 2]
+  515.                              //         = sum(c in z) [zm * cvol / zvol * .5 * u ^ 2]
+  516.                              double sumk = 0.; 
+  517.  +    VFr2-------------<     for (int s = sfirst; s < slast; ++s) {
+  518.       VFr2                       int s3 = mesh->mapss3[s];
+  519.       VFr2                       int p1 = mesh->mapsp1[s];
+  520.       VFr2                       int z = mesh->mapsz[s];
+  521.       VFr2               
+  522.       VFr2                       double cvol = zarea[z] * px[p1].x * 0.5 * (smf[s] + smf[s3]);
+  523.       VFr2 I                     double cke = zm[z] * cvol / zvol[z] * 0.5 * length2(pu[p1]);
+  524.       VFr2                       sumk += cke;
+  525.       VFr2------------->     }
+  526.                              // multiply by 2\pi for cylindrical geometry
+  527.                              ek += sumk * 2 * M_PI;
+  528.                          
+  529.                          }
+  530.                          
+  531.                          
+  532.                          void Hydro::calcDtCourant(
+  533.                                  const double* zdl,
+  534.                                  double& dtrec,
+  535.                                  char* msgdtrec,
+  536.                                  const int zfirst,
+  537.                                  const int zlast) {
+  538.                          
+  539.                              const double fuzz = 1.e-99;
+  540.                              double dtnew = 1.e99;
+  541.                              int zmin = -1;
+  542.  +    Fr2--------------<     for (int z = zfirst; z < zlast; ++z) {
+  543.       Fr2 I                      double cdu = max(zdu[z], max(zss[z], fuzz));
+  544.       Fr2                        double zdthyd = zdl[z] * cfl / cdu;
+  545.       Fr2                        zmin = (zdthyd < dtnew ? z : zmin);
+  546.       Fr2                        dtnew = (zdthyd < dtnew ? zdthyd : dtnew);
+  547.       Fr2-------------->     }
+  548.                          
+  549.                              if (dtnew < dtrec) {
+  550.                                  dtrec = dtnew;
+  551.  +                               snprintf(msgdtrec, 80, "Hydro Courant limit for z = %d", zmin);
+  552.                              }
+  553.                          
+  554.                          }
+  555.                          
+  556.                          
+  557.                          void Hydro::calcDtVolume(
+  558.                                  const double* zvol,
+  559.                                  const double* zvol0,
+  560.                                  const double dtlast,
+  561.                                  double& dtrec,
+  562.                                  char* msgdtrec,
+  563.                                  const int zfirst,
+  564.                                  const int zlast) {
+  565.                          
+  566.                              double dvovmax = 1.e-99;
+  567.                              int zmax = -1;
+  568.  +    Fr2--------------<     for (int z = zfirst; z < zlast; ++z) {
+  569.       Fr2 I                      double zdvov = abs((zvol[z] - zvol0[z]) / zvol0[z]);
+  570.       Fr2                        zmax = (zdvov > dvovmax ? z : zmax);
+  571.       Fr2                        dvovmax = (zdvov > dvovmax ? zdvov : dvovmax);
+  572.       Fr2-------------->     }
+  573.                              double dtnew = dtlast * cflv / dvovmax;
+  574.                              if (dtnew < dtrec) {
+  575.                                  dtrec = dtnew;
+  576.  +                               snprintf(msgdtrec, 80, "Hydro dV/V limit for z = %d", zmax);
+  577.                              }
+  578.                          
+  579.                          }
+  580.                          
+  581.                          
+  582.                          void Hydro::calcDtHydro(
+  583.                                  const double* zdl,
+  584.                                  const double* zvol,
+  585.                                  const double* zvol0,
+  586.                                  const double dtlast,
+  587.                                  const int zfirst,
+  588.                                  const int zlast) {
+  589.                          
+  590.                              double dtchunk = 1.e99;
+  591.  +                           char msgdtchunk[80];
+  592.                          
+  593.  +    r2 Ip-----------<>     calcDtCourant(zdl, dtchunk, msgdtchunk, zfirst, zlast);
+  594.  +    r2 Ip-----------<>     calcDtVolume(zvol, zvol0, dtlast, dtchunk, msgdtchunk,
+  595.                                      zfirst, zlast);
+  596.                              if (dtchunk < dtrec) {
+  597.                                  #pragma omp critical
+  598.                                  {
+  599.                                      // redundant test needed to avoid race condition
+  600.                                      if (dtchunk < dtrec) {
+  601.                                          dtrec = dtchunk;
+  602.  +                                       strncpy(msgdtrec, msgdtchunk, 80);
+  603.                                      }
+  604.                                  }
+  605.                              }
+  606.                          
+  607.                          }
+  608.                          
+  609.                          
+  610.                          void Hydro::getDtHydro(
+  611.                                  double& dtnew,
+  612.                                  string& msgdtnew) {
+  613.                          
+  614.                              if (dtrec < dtnew) {
+  615.                                  dtnew = dtrec;
+  616.  +                               msgdtnew = string(msgdtrec);
+  617.                              }
+  618.                          
+  619.                          }
+  620.                          
+  621.                          
+  622.                          void Hydro::resetDtHydro() {
+  623.                          
+  624.                              dtrec = 1.e99;
+  625.  +                           strcpy(msgdtrec, "Hydro default");
+  626.                          
+  627.                          }
+  628.                          
+  629.                          
+  630.                          void Hydro::writeEnergyCheck() {
+  631.                          
+  632.                              using Parallel::mype;
+  633.                              
+  634.                              double ei = 0.;
+  635.                              double ek = 0.;
+  636.                              #pragma omp parallel for schedule(static)
+  637.  +    MmF--------------<     for (int sch = 0; sch < mesh->numsch; ++sch) {
+  638.       MmF I                      int sfirst = mesh->schsfirst[sch];
+  639.       MmF I                      int slast = mesh->schslast[sch];
+  640.       MmF I                      int zfirst = mesh->schzfirst[sch];
+  641.       MmF I                      int zlast = mesh->schzlast[sch];
+  642.       MmF                
+  643.       MmF                        double eichunk = 0.;
+  644.       MmF                        double ekchunk = 0.;
+  645.       MmF Vr4 I-------<>         sumEnergy(zetot, mesh->zarea, mesh->zvol, zm, mesh->smf,
+  646.       MmF                                mesh->px, pu, eichunk, ekchunk,
+  647.       MmF                                zfirst, zlast, sfirst, slast);
+  648.       MmF                        #pragma omp critical
+  649.       MmF                        {
+  650.       MmF                            ei += eichunk;
+  651.       MmF                            ek += ekchunk;
+  652.       MmF                        }
+  653.       MmF-------------->     }
+  654.                          
+  655.  +                           Parallel::globalSum(ei);
+  656.  +                           Parallel::globalSum(ek);
+  657.                          
+  658.                              if (mype == 0) {
+  659.  +    I                          cout << scientific << setprecision(6);
+  660.  +    I                          cout << "Energy check:  "
+  661.                                       << "total energy  = " << setw(14) << ei + ek << endl;
+  662.  +    I                          cout << "(internal = " << setw(14) << ei
+  663.                                       << ", kinetic = " << setw(14) << ek << ")" << endl;
+  664.                              }
+  665.                          
+  666.                           }
+
+CC-6005 CC: SCALAR __copy_m<double2 *, double2 *>, File = stl_algobase.h, Line = 322 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR __copy_m<double2 *, double2 *>, File = stl_algobase.h, Line = 322 
+  A loop was conditionally vectorized.
+
+CC-6005 CC: SCALAR __copy_move_a<false, double2 *, double2 *>, File = stl_algobase.h, Line = 385 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR __copy_move_a<false, double2 *, double2 *>, File = stl_algobase.h, Line = 385 
+  A loop was conditionally vectorized.
+
+CC-6005 CC: SCALAR __copy_move_a2<false, double2 *, double2 *>, File = stl_algobase.h, Line = 422 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR __copy_move_a2<false, double2 *, double2 *>, File = stl_algobase.h, Line = 422 
+  A loop was conditionally vectorized.
+
+CC-6005 CC: SCALAR copy<double2 *, double2 *>, File = stl_algobase.h, Line = 454 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR copy<double2 *, double2 *>, File = stl_algobase.h, Line = 454 
+  A loop was conditionally vectorized.
+
+CC-6005 CC: SCALAR __fill_a<double2 *, double2>, File = stl_algobase.h, Line = 684 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR __fill_a<double2 *, double2>, File = stl_algobase.h, Line = 684 
+  A loop was not vectorized because a recurrence was found between "__value" and "__first" at line 685.
+
+CC-6005 CC: SCALAR __fill_a<double *, double>, File = stl_algobase.h, Line = 695 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR __fill_a<double *, double>, File = stl_algobase.h, Line = 695 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR fill<double *, double>, File = stl_algobase.h, Line = 731 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR fill<double *, double>, File = stl_algobase.h, Line = 731 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR fill<double2 *, double2>, File = stl_algobase.h, Line = 731 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR fill<double2 *, double2>, File = stl_algobase.h, Line = 731 
+  A loop was not vectorized because a recurrence was found between "__value" and "__first" at line 731.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_bvector.h, Line = 398, Column = 21 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:28) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = vector.tcc, Line = 428, Column = 15 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:95) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = vector.tcc, Line = 428, Column = 15 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA operator-, File = Vec2.hh, Line = 100, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator+, File = Vec2.hh, Line = 109, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator-, File = Vec2.hh, Line = 115, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator*, File = Vec2.hh, Line = 121, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator*, File = Vec2.hh, Line = 127, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA operator/, File = Vec2.hh, Line = 134, Column = 5 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3021 CC: IPA __sti___b1d5ba22_ff10ccd4, File = iostream, Line = 74, Column = 25 
+  "Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 36, Column = 55 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 36, Column = 55 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 36, Column = 55 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 37, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 37, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 37, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 37, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 37, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 38, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 38, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 38, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 38, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 38, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 39, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 39, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 39, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 39, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 39, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 40, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 40, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 40, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 40, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 40, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 41, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 41, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 41, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 41, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 41, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 42, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 42, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 42, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 42, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 42, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 43, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 43, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 43, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 43, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 43, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  "getDoubleList" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:596) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 44, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  "getDoubleList" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:596) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 45, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 47, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 47, Column = 5 
+  "PolyGas" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 48, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 48, Column = 5 
+  "TTS" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 49, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 49, Column = 5 
+  "QCS" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 51, Column = 19 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 52, Column = 19 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3118 CC: IPA <unnamed>, File = Hydro.cc, Line = 52, Column = 19 
+  "~Hydro"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:62) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-6287 CC: VECTOR Hydro, File = Hydro.cc, Line = 53 
+  A loop was not vectorized because it contains a call to function "operator new " on line 54.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 53, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 53, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:28) was textually inlined.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  "getXPlane" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  "HydroBC" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:1090) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 54, Column = 9 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6287 CC: VECTOR Hydro, File = Hydro.cc, Line = 55 
+  A loop was not vectorized because it contains a call to function "operator new " on line 56.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 55, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 55, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:28) was textually inlined.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  "getYPlane" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  "HydroBC" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:1090) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA Hydro, File = Hydro.cc, Line = 56, Column = 9 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3118 CC: IPA Hydro, File = Hydro.cc, Line = 58, Column = 5 
+  "init"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:72) was not inlined because the call site will not flatten. 
+  "strcpy" is missing.
+
+CC-3021 CC: IPA ~Hydro, File = Hydro.cc, Line = 64, Column = 5 
+  "~TTS" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 64, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:615) was textually inlined and flattened.
+
+CC-3021 CC: IPA ~Hydro, File = Hydro.cc, Line = 65, Column = 5 
+  "~QCS" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 65, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:615) was textually inlined and flattened.
+
+CC-6287 CC: VECTOR ~Hydro, File = Hydro.cc, Line = 66 
+  A loop was not vectorized because it contains a call to function "HydroBC::~HydroBC" on line 67.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 66, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 66, Column = 5 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 67, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3021 CC: IPA ~Hydro, File = Hydro.cc, Line = 67, Column = 9 
+  "~HydroBC" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 67, Column = 9 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:615) was textually inlined and flattened.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 69, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 69, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA ~Hydro, File = Hydro.cc, Line = 69, Column = 1 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 84, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 85, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 86, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 87, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 88, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 89, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 90, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 91, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 92, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 93, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 94, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 95, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 96, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 97, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 98, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 99, Column = 5 
+  Tiny leaf routine "alloc<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 100, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 101, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 102, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 103, Column = 5 
+  Tiny leaf routine "alloc<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:30) was textually inlined.
+
+CC-6306 CC: VECTOR init, File = Hydro.cc, Line = 107 
+  A loop was not vectorized because the iteration space is too irregular.
+
+CC-6831 CC: THREAD init, File = Hydro.cc, Line = 107 
+  An expanded multi-threaded region was created starting near line 107 and ending near line 145.
+
+CC-6824 CC: THREAD init, File = Hydro.cc, Line = 107 
+  A region starting at line 107 and ending at line 135 was multi-threaded and merged with an expanded multi-thread region.
+
+CC-6817 CC: THREAD init, File = Hydro.cc, Line = 107 
+  A loop was partitioned.
+
+CC-3182 CC: IPA init, File = Hydro.cc, Line = 107, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 108, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 109, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR init, File = Hydro.cc, Line = 111 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 111 
+  A loop was vectorized.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 111, Column = 9 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR init, File = Hydro.cc, Line = 112 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 112 
+  A loop was vectorized.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 112, Column = 9 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:724) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR init, File = Hydro.cc, Line = 113 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 113 
+  A loop was vectorized.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 113, Column = 9 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:724) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 116, Column = 9 
+  Tiny routine "empty"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:894) was textually inlined and flattened.
+
+CC-6375 CC: VECTOR init, File = Hydro.cc, Line = 119 
+  A loop would benefit from "#pragma safe_address".
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 119 
+  A loop was vectorized.
+
+CC-3182 CC: IPA init, File = Hydro.cc, Line = 119, Column = 13 
+  Loop has been flattened.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 120, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:948) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 120, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:948) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 120, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:948) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 120, Column = 17 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:948) was textually inlined.
+
+CC-6005 CC: SCALAR init, File = Hydro.cc, Line = 131 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 131 
+  A loop was vectorized.
+
+CC-6294 CC: VECTOR init, File = Hydro.cc, Line = 138 
+  A loop was not vectorized because a better candidate was found at line 142.
+
+CC-6824 CC: THREAD init, File = Hydro.cc, Line = 138 
+  A region starting at line 138 and ending at line 145 was multi-threaded and merged with an expanded multi-thread region.
+
+CC-6817 CC: THREAD init, File = Hydro.cc, Line = 138 
+  A loop was partitioned.
+
+CC-3182 CC: IPA init, File = Hydro.cc, Line = 138, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 139, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 140, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-6375 CC: VECTOR init, File = Hydro.cc, Line = 142 
+  A loop would benefit from "#pragma safe_address".
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 142 
+  A loop was vectorized.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 142, Column = 13 
+  Tiny routine "initRadialVel"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:152) was textually inlined and flattened.
+
+CC-6005 CC: SCALAR init, File = Hydro.cc, Line = 144 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR init, File = Hydro.cc, Line = 144 
+  A loop was vectorized.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 144, Column = 13 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 144, Column = 13 
+  Tiny routine "fill<double2 *, double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:724) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA init, File = Hydro.cc, Line = 147, Column = 5 
+  Tiny routine "resetDtHydro"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:622) was textually inlined.  NOT INLINED: 
+  strcpy.
+
+CC-6375 CC: VECTOR initRadialVel, File = Hydro.cc, Line = 160 
+  A loop would benefit from "#pragma safe_address".
+
+CC-6204 CC: VECTOR initRadialVel, File = Hydro.cc, Line = 160 
+  A loop was vectorized.
+
+CC-3182 CC: IPA initRadialVel, File = Hydro.cc, Line = 160, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA initRadialVel, File = Hydro.cc, Line = 161, Column = 21 
+  Tiny leaf routine "length"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:153) was textually inlined.
+
+CC-3001 CC: IPA initRadialVel, File = Hydro.cc, Line = 163, Column = 13 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA initRadialVel, File = Hydro.cc, Line = 163, Column = 13 
+  Tiny routine "operator/"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:131) was textually inlined and flattened.
+
+CC-3001 CC: IPA initRadialVel, File = Hydro.cc, Line = 163, Column = 13 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-3001 CC: IPA initRadialVel, File = Hydro.cc, Line = 165, Column = 13 
+  Tiny leaf routine "double2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:27) was textually inlined.
+
+CC-3001 CC: IPA initRadialVel, File = Hydro.cc, Line = 165, Column = 13 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-6306 CC: VECTOR doCycle, File = Hydro.cc, Line = 198 
+  A loop was not vectorized because the iteration space is too irregular.
+
+CC-6831 CC: THREAD doCycle, File = Hydro.cc, Line = 198 
+  An expanded multi-threaded region was created starting near line 198 and ending near line 243.
+
+CC-6824 CC: THREAD doCycle, File = Hydro.cc, Line = 198 
+  A region starting at line 198 and ending at line 209 was multi-threaded and merged with an expanded multi-thread region.
+
+CC-6817 CC: THREAD doCycle, File = Hydro.cc, Line = 198 
+  A loop was partitioned.
+
+CC-3182 CC: IPA doCycle, File = Hydro.cc, Line = 198, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 199, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 200, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 203 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR doCycle, File = Hydro.cc, Line = 203 
+  A loop was conditionally vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 203, Column = 9 
+  Tiny routine "copy<double2 *, double2 *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:446) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 204 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR doCycle, File = Hydro.cc, Line = 204 
+  A loop was conditionally vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 204, Column = 9 
+  Tiny routine "copy<double2 *, double2 *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:446) was textually inlined and
+  flattened.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 208 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 208 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 208, Column = 9 
+  Tiny routine "advPosHalf"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:310) was textually inlined and flattened.
+
+CC-6263 CC: VECTOR doCycle, File = Hydro.cc, Line = 212 
+  A loop was not vectorized because it contains a reference to a non-vector intrinsic on line 219.
+
+CC-6824 CC: THREAD doCycle, File = Hydro.cc, Line = 212 
+  A region starting at line 212 and ending at line 243 was multi-threaded and merged with an expanded multi-thread region.
+
+CC-6817 CC: THREAD doCycle, File = Hydro.cc, Line = 212 
+  A loop was partitioned.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 213, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 214, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 215, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 216, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 219, Column = 9 
+  Tiny routine "copy<double *, double *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:446) was textually inlined and
+  flattened.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 222, Column = 9 
+  "calcCtrs" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 223, Column = 9 
+  "calcVols" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 225, Column = 9 
+  "calcSurfVecs" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 226, Column = 9 
+  "calcEdgeLen" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 227, Column = 9 
+  "calcCharLen" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 230 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 230 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 230, Column = 9 
+  Tiny leaf routine "calcRho"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:401) was textually inlined.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 231 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 231 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 231, Column = 9 
+  Tiny leaf routine "calcCrnrMass"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:346) was textually inlined.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 234, Column = 9 
+  "calcStateAtHalf" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 238, Column = 9 
+  "calcForce" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 239, Column = 9 
+  "calcForce" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 241, Column = 9 
+  "calcForce" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 242 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 242 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 242, Column = 9 
+  Tiny routine "sumCrnrForce"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:365) was textually inlined and flattened.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 244, Column = 5 
+  "checkBadSides" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 247, Column = 5 
+  "sumToPoints<double>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 248, Column = 5 
+  "sumToPoints<double2>" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR doCycle, File = Hydro.cc, Line = 251 
+  A loop was not vectorized because it contains a call to function "HydroBC::applyFixedBC" on line 259.
+
+CC-6823 CC: THREAD doCycle, File = Hydro.cc, Line = 251 
+  A region starting at line 251 and ending at line 268 was multi-threaded.
+
+CC-6817 CC: THREAD doCycle, File = Hydro.cc, Line = 251 
+  A loop was partitioned.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 252, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 253, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-6287 CC: VECTOR doCycle, File = Hydro.cc, Line = 256 
+  A loop was not vectorized because it contains a call to function "HydroBC::applyFixedBC" on line 259.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 256, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 256, Column = 9 
+  Tiny leaf routine "size"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:805) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 257, Column = 24 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 257, Column = 24 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 258, Column = 23 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 258, Column = 23 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 259, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 259, Column = 13 
+  "applyFixedBC" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 263 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 263 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 263, Column = 9 
+  Tiny routine "calcAccel"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:384) was textually inlined and flattened.
+
+CC-3172 CC: IPA doCycle, File = Hydro.cc, Line = 267, Column = 9 
+  "advPosFull"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:327) was not inlined because the enclosing loop body did not
+  completely flatten.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 270, Column = 5 
+  Tiny routine "resetDtHydro"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:622) was textually inlined.  NOT INLINED: 
+  strcpy.
+
+CC-6287 CC: VECTOR doCycle, File = Hydro.cc, Line = 273 
+  A loop was not vectorized because it contains a call to function "Mesh::calcCtrs" on line 280.
+
+CC-6823 CC: THREAD doCycle, File = Hydro.cc, Line = 273 
+  A region starting at line 273 and ending at line 288 was multi-threaded.
+
+CC-6817 CC: THREAD doCycle, File = Hydro.cc, Line = 273 
+  A loop was partitioned.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 274, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 275, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 276, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 277, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 280, Column = 9 
+  "calcCtrs" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 281, Column = 9 
+  "calcVols" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 285 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 285 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 285, Column = 9 
+  Tiny routine "fill<double *, double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:724) was textually inlined and
+  flattened.
+
+CC-6299 CC: VECTOR doCycle, File = Hydro.cc, Line = 286 
+  A loop was not vectorized because a recurrence was found involving "pxp" at line 286.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 286, Column = 9 
+  Tiny routine "calcWork"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:416) was textually inlined and flattened.
+
+CC-3021 CC: IPA doCycle, File = Hydro.cc, Line = 289, Column = 5 
+  "checkBadSides" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR doCycle, File = Hydro.cc, Line = 292 
+  A loop was not vectorized because it contains a call to function "snprintf" on line 304.
+
+CC-6823 CC: THREAD doCycle, File = Hydro.cc, Line = 292 
+  A region starting at line 292 and ending at line 305 was multi-threaded.
+
+CC-6817 CC: THREAD doCycle, File = Hydro.cc, Line = 292 
+  A loop was partitioned.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 293, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 294, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 297 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 297 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 297, Column = 9 
+  Tiny leaf routine "calcWorkRate"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:453) was textually inlined.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 300 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 300 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 300, Column = 9 
+  Tiny leaf routine "calcEnergy"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:472) was textually inlined.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 301 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR doCycle, File = Hydro.cc, Line = 301 
+  A loop was vectorized.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 301, Column = 9 
+  Tiny leaf routine "calcRho"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:401) was textually inlined.
+
+CC-6005 CC: SCALAR doCycle, File = Hydro.cc, Line = 304 
+  A loop was unrolled 2 times.
+
+CC-6254 CC: VECTOR doCycle, File = Hydro.cc, Line = 304 
+  A loop was not vectorized because a recurrence was found on "zmin" at line 304.
+
+CC-3001 CC: IPA doCycle, File = Hydro.cc, Line = 304, Column = 9 
+  Tiny routine "calcDtHydro"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:582) was textually inlined.  NOT INLINED: 
+  snprintf : snprintf : strncpy.
+
+CC-6005 CC: SCALAR advPosHalf, File = Hydro.cc, Line = 321 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR advPosHalf, File = Hydro.cc, Line = 321 
+  A loop was vectorized.
+
+CC-3182 CC: IPA advPosHalf, File = Hydro.cc, Line = 321, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA advPosHalf, File = Hydro.cc, Line = 322, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:119) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosHalf, File = Hydro.cc, Line = 322, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosHalf, File = Hydro.cc, Line = 322, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-6005 CC: SCALAR advPosFull, File = Hydro.cc, Line = 338 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR advPosFull, File = Hydro.cc, Line = 338 
+  A loop was vectorized.
+
+CC-3182 CC: IPA advPosFull, File = Hydro.cc, Line = 338, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 339, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:119) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 339, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 339, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 340, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 340, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 340, Column = 9 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:119) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 340, Column = 9 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA advPosFull, File = Hydro.cc, Line = 340, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-6005 CC: SCALAR calcCrnrMass, File = Hydro.cc, Line = 355 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcCrnrMass, File = Hydro.cc, Line = 355 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR sumCrnrForce, File = Hydro.cc, Line = 374 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR sumCrnrForce, File = Hydro.cc, Line = 374 
+  A loop was vectorized.
+
+CC-3182 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 374, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 377, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 377, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 377, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 377, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 377, Column = 17 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:113) was textually inlined and flattened.
+
+CC-3001 CC: IPA sumCrnrForce, File = Hydro.cc, Line = 379, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-6005 CC: SCALAR calcAccel, File = Hydro.cc, Line = 394 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcAccel, File = Hydro.cc, Line = 394 
+  A loop was vectorized.
+
+CC-3182 CC: IPA calcAccel, File = Hydro.cc, Line = 394, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcAccel, File = Hydro.cc, Line = 395, Column = 9 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:219) was textually inlined.
+
+CC-3001 CC: IPA calcAccel, File = Hydro.cc, Line = 395, Column = 9 
+  Tiny routine "operator/"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:131) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcAccel, File = Hydro.cc, Line = 395, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:31) was textually inlined.
+
+CC-6005 CC: SCALAR calcRho, File = Hydro.cc, Line = 409 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcRho, File = Hydro.cc, Line = 409 
+  A loop was vectorized.
+
+CC-6291 CC: VECTOR calcWork, File = Hydro.cc, Line = 435 
+  A loop was not vectorized because a recurrence was found between "px" at line 443 and "zetot" at line 445.
+
+CC-3182 CC: IPA calcWork, File = Hydro.cc, Line = 435, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcWork, File = Hydro.cc, Line = 440, Column = 17 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcWork, File = Hydro.cc, Line = 441, Column = 16 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcWork, File = Hydro.cc, Line = 441, Column = 16 
+  Tiny leaf routine "dot"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:141) was textually inlined.
+
+CC-3001 CC: IPA calcWork, File = Hydro.cc, Line = 442, Column = 16 
+  Tiny routine "operator-"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:98) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcWork, File = Hydro.cc, Line = 442, Column = 16 
+  Tiny routine "operator+"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:107) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcWork, File = Hydro.cc, Line = 442, Column = 16 
+  Tiny leaf routine "dot"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:141) was textually inlined.
+
+CC-6005 CC: SCALAR calcWorkRate, File = Hydro.cc, Line = 464 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcWorkRate, File = Hydro.cc, Line = 464 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR calcEnergy, File = Hydro.cc, Line = 481 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR calcEnergy, File = Hydro.cc, Line = 481 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR sumEnergy, File = Hydro.cc, Line = 505 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR sumEnergy, File = Hydro.cc, Line = 505 
+  A loop was vectorized.
+
+CC-6005 CC: SCALAR sumEnergy, File = Hydro.cc, Line = 517 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR sumEnergy, File = Hydro.cc, Line = 517 
+  A loop was vectorized.
+
+CC-3182 CC: IPA sumEnergy, File = Hydro.cc, Line = 517, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA sumEnergy, File = Hydro.cc, Line = 523, Column = 20 
+  Tiny leaf routine "length2"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:159) was textually inlined.
+
+CC-6005 CC: SCALAR calcDtCourant, File = Hydro.cc, Line = 542 
+  A loop was unrolled 2 times.
+
+CC-6254 CC: VECTOR calcDtCourant, File = Hydro.cc, Line = 542 
+  A loop was not vectorized because a recurrence was found on "zmin" at line 545.
+
+CC-3182 CC: IPA calcDtCourant, File = Hydro.cc, Line = 542, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcDtCourant, File = Hydro.cc, Line = 543, Column = 20 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:219) was textually inlined.
+
+CC-3001 CC: IPA calcDtCourant, File = Hydro.cc, Line = 543, Column = 20 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:219) was textually inlined.
+
+CC-3021 CC: IPA calcDtCourant, File = Hydro.cc, Line = 551, Column = 9 
+  "snprintf" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR calcDtVolume, File = Hydro.cc, Line = 568 
+  A loop was unrolled 2 times.
+
+CC-6254 CC: VECTOR calcDtVolume, File = Hydro.cc, Line = 568 
+  A loop was not vectorized because a recurrence was found on "zmax" at line 570.
+
+CC-3182 CC: IPA calcDtVolume, File = Hydro.cc, Line = 568, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcDtVolume, File = Hydro.cc, Line = 569, Column = 22 
+  Tiny leaf routine "abs"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:70) was textually inlined.
+
+CC-3021 CC: IPA calcDtVolume, File = Hydro.cc, Line = 576, Column = 9 
+  "snprintf" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 591, Column = 10 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 591, Column = 10 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR calcDtHydro, File = Hydro.cc, Line = 593 
+  A loop was unrolled 2 times.
+
+CC-6254 CC: VECTOR calcDtHydro, File = Hydro.cc, Line = 593 
+  A loop was not vectorized because a recurrence was found on "zmin" at line 593.
+
+CC-3001 CC: IPA calcDtHydro, File = Hydro.cc, Line = 593, Column = 5 
+  Tiny routine "calcDtCourant"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:532) was textually inlined.  NOT INLINED: 
+  snprintf.
+
+CC-6005 CC: SCALAR calcDtHydro, File = Hydro.cc, Line = 594 
+  A loop was unrolled 2 times.
+
+CC-6254 CC: VECTOR calcDtHydro, File = Hydro.cc, Line = 594 
+  A loop was not vectorized because a recurrence was found on "zmax" at line 594.
+
+CC-3001 CC: IPA calcDtHydro, File = Hydro.cc, Line = 594, Column = 5 
+  Tiny routine "calcDtVolume"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:557) was textually inlined.  NOT INLINED: 
+  snprintf.
+
+CC-3021 CC: IPA calcDtHydro, File = Hydro.cc, Line = 602, Column = 17 
+  "strncpy" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 616, Column = 9 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 616, Column = 9 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 616, Column = 9 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 616, Column = 9 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDtHydro, File = Hydro.cc, Line = 616, Column = 9 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA resetDtHydro, File = Hydro.cc, Line = 625, Column = 5 
+  "strcpy" was not inlined because the compiler was unable to locate the routine.
+
+CC-6254 CC: VECTOR writeEnergyCheck, File = Hydro.cc, Line = 637 
+  A loop was not vectorized because a recurrence was found on "ei" at line 650.
+
+CC-6823 CC: THREAD writeEnergyCheck, File = Hydro.cc, Line = 637 
+  A region starting at line 637 and ending at line 653 was multi-threaded.
+
+CC-6817 CC: THREAD writeEnergyCheck, File = Hydro.cc, Line = 637 
+  A loop was partitioned.
+
+CC-3182 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 637, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 638, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 639, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 640, Column = 20 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 641, Column = 19 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:930) was textually inlined.
+
+CC-6005 CC: SCALAR writeEnergyCheck, File = Hydro.cc, Line = 645 
+  A loop was unrolled 4 times.
+
+CC-6204 CC: VECTOR writeEnergyCheck, File = Hydro.cc, Line = 645 
+  A loop was vectorized.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 645, Column = 9 
+  Tiny routine "sumEnergy"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:488) was textually inlined and flattened.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 655, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 656, Column = 5 
+  "globalSum" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 659, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 659, Column = 9 
+  Tiny leaf routine "setprecision"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:195) was textually inlined.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 659, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 660, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 660, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 660, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 660, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 660, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 660, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Hydro.cc:225) was textually inlined.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA writeEnergyCheck, File = Hydro.cc, Line = 662, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -1,0 +1,827 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/Driver.o src/Driver.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc
+Date     : 06/04/2020  18:09:47
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.              /*
+    2.               * Driver.cc
+    3.               *
+    4.               *  Created on: Jan 23, 2012
+    5.               *      Author: cferenba
+    6.               *
+    7.               * Copyright (c) 2012, Triad National Security, LLC.
+    8.               * All rights reserved.
+    9.               * Use of this source code is governed by a BSD-style open-source
+   10.               * license; see top-level LICENSE file for full license text.
+   11.               */
+   12.              
+   13.              #include "Driver.hh"
+   14.              
+   15.              #include <cstdlib>
+   16.              #include <cstring>
+   17.              #include <sys/time.h>
+   18.              #include <iostream>
+   19.              #include <fstream>
+   20.              #include <sstream>
+   21.              #include <iomanip>
+   22.              #ifdef _OPENMP
+   23.              #include "omp.h"
+   24.              #endif
+   25.              
+   26.              #include "Parallel.hh"
+   27.              #include "InputFile.hh"
+   28.              #include "Mesh.hh"
+   29.              #include "Hydro.hh"
+   30.              
+   31.              using namespace std;
+   32.              
+   33.              
+   34.              Driver::Driver(const InputFile* inp, const string& pname)
+   35.  +                   : probname(pname) {
+   36.                  using Parallel::numpe;
+   37.                  using Parallel::mype;
+   38.              
+   39.                  if (mype == 0) {
+   40.  +                   cout << "********************" << endl;
+   41.  +                   cout << "Running PENNANT v0.9" << endl;
+   42.  +                   cout << "********************" << endl;
+   43.  +                   cout << endl;
+   44.              
+   45.              #ifdef USE_MPI
+   46.  +                   cout << "Running on " << numpe << " MPI PE(s)" << endl;
+   47.              #endif
+   48.              #ifdef _OPENMP
+   49.  +                   cout << "Running on " << omp_get_max_threads() << " thread(s)"
+   50.                           << endl;
+   51.              #endif
+   52.                  }  // if mype == 0
+   53.              
+   54.  +               cstop = inp->getInt("cstop", 999999);
+   55.  +               tstop = inp->getDouble("tstop", 1.e99);
+   56.                  if (cstop == 999999 && tstop == 1.e99) {
+   57.                      if (mype == 0)
+   58.  +                       cerr << "Must specify either cstop or tstop" << endl;
+   59.  +                   exit(1);
+   60.                  }
+   61.  +               dtmax = inp->getDouble("dtmax", 1.e99);
+   62.  +               dtinit = inp->getDouble("dtinit", 1.e99);
+   63.  +               dtfac = inp->getDouble("dtfac", 1.2);
+   64.  +               dtreport = inp->getInt("dtreport", 10);
+   65.              
+   66.                  // initialize mesh, hydro
+   67.  +               mesh = new Mesh(inp);
+   68.  +               hydro = new Hydro(inp, mesh);
+   69.              
+   70.              }
+   71.              
+   72.              Driver::~Driver() {
+   73.              
+   74.  + I             delete hydro;
+   75.  + I             delete mesh;
+   76.              
+   77.  +           }
+   78.              
+   79.              void Driver::run() {
+   80.                  using Parallel::mype;
+   81.              
+   82.                  time = 0.0;
+   83.                  cycle = 0;
+   84.              
+   85.                  // do energy check
+   86.  +               hydro->writeEnergyCheck();
+   87.              
+   88.  +               double tbegin, tlast;
+   89.                  if (mype == 0) {
+   90.                      // get starting timestamp
+   91.                      struct timeval sbegin;
+   92.  +                   gettimeofday(&sbegin, NULL);
+   93.                      tbegin = sbegin.tv_sec + sbegin.tv_usec * 1.e-6;
+   94.                      tlast = tbegin;
+   95.                  }
+   96.              
+   97.                  // main event loop
+   98.  + 1-------<     while (cycle < cstop && time < tstop) {
+   99.    1         
+  100.    1                 cycle += 1;
+  101.    1         
+  102.    1                 // get timestep
+  103.    1 Ip              calcGlobalDt();
+  104.    1         
+  105.    1                 // begin hydro cycle
+  106.  + 1                 hydro->doCycle(dt);
+  107.    1         
+  108.    1                 time += dt;
+  109.    1         
+  110.    1                 if (mype == 0 &&
+  111.    1                         (cycle == 1 || cycle % dtreport == 0)) {
+  112.    1                     struct timeval scurr;
+  113.  + 1                     gettimeofday(&scurr, NULL);
+  114.    1                     double tcurr = scurr.tv_sec + scurr.tv_usec * 1.e-6;
+  115.    1                     double tdiff = tcurr - tlast;
+  116.    1         
+  117.  + 1 I                   cout << scientific << setprecision(5);
+  118.  + 1 I                   cout << "End cycle " << setw(6) << cycle
+  119.    1                          << ", time = " << setw(11) << time
+  120.    1                          << ", dt = " << setw(11) << dt
+  121.    1                          << ", wall = " << setw(11) << tdiff << endl;
+  122.  + 1                     cout << "dt limiter: " << msgdt << endl;
+  123.    1         
+  124.    1                     tlast = tcurr;
+  125.    1                 } // if mype...
+  126.    1         
+  127.    1------->     } // while cycle...
+  128.              
+  129.                  if (mype == 0) {
+  130.              
+  131.                      // get stopping timestamp
+  132.                      struct timeval send;
+  133.  +                   gettimeofday(&send, NULL);
+  134.                      double tend = send.tv_sec + send.tv_usec * 1.e-6;
+  135.                      double runtime = tend - tbegin;
+  136.              
+  137.                      // write end message
+  138.  +                   cout << endl;
+  139.  +                   cout << "Run complete" << endl;
+  140.  + I                 cout << scientific << setprecision(6);
+  141.  + I                 cout << "cycle = " << setw(6) << cycle
+  142.                           << ",         cstop = " << setw(6) << cstop << endl;
+  143.  + I                 cout << "time  = " << setw(14) << time
+  144.                           << ", tstop = " << setw(14) << tstop << endl;
+  145.              
+  146.  +                   cout << endl;
+  147.  +                   cout << "************************************" << endl;
+  148.  + I                 cout << "hydro cycle run time= " << setw(14) << runtime << endl;
+  149.  +                   cout << "************************************" << endl;
+  150.              
+  151.                  } // if mype
+  152.              
+  153.                  // do energy check
+  154.  +               hydro->writeEnergyCheck();
+  155.              
+  156.                  // do final mesh output
+  157.  +               mesh->write(probname, cycle, time,
+  158.                          hydro->zr, hydro->ze, hydro->zp);
+  159.              
+  160.              }
+  161.              
+  162.              
+  163.              void Driver::calcGlobalDt() {
+  164.              
+  165.                  using Parallel::mype;
+  166.              
+  167.                  // Save timestep from last cycle
+  168.                  dtlast = dt;
+  169.  +               msgdtlast = msgdt;
+  170.              
+  171.                  // Compute timestep for this cycle
+  172.                  dt = dtmax;
+  173.  +               msgdt = "Global maximum (dtmax)";
+  174.              
+  175.                  if (cycle == 1) {
+  176.                      // compare to initial timestep
+  177.                      if (dtinit < dt) {
+  178.                          dt = dtinit;
+  179.  +                       msgdt = "Initial timestep";
+  180.                      }
+  181.                  } else {
+  182.                      // compare to factor * previous timestep
+  183.                      double dtrecover = dtfac * dtlast;
+  184.                      if (dtrecover < dt) {
+  185.                          dt = dtrecover;
+  186.  + Ip                    if (msgdtlast.substr(0, 8) == "Recovery")
+  187.  +                           msgdt = msgdtlast;
+  188.                          else
+  189.  + Ip                        msgdt = "Recovery: " + msgdtlast;
+  190.                      }
+  191.                  }
+  192.              
+  193.                  // compare to time-to-end
+  194.                  if ((tstop - time) < dt) {
+  195.                      dt = tstop - time;
+  196.  +                   msgdt = "Global (tstop - time)";
+  197.                  }
+  198.              
+  199.                  // compare to hydro dt
+  200.  +               hydro->getDtHydro(dt, msgdt);
+  201.              
+  202.              #ifdef USE_MPI
+  203.                  int pedt;
+  204.  +               Parallel::globalMinLoc(dt, pedt);
+  205.              
+  206.                  // if the global min isn't on this PE, get the right message
+  207.                  if (pedt > 0) {
+  208.                      const int tagmpi = 300;
+  209.                      if (mype == pedt) {
+  210.                          char cmsgdt[80];
+  211.  +                       strncpy(cmsgdt, msgdt.c_str(), 80);
+  212.  +                       MPI_Send(cmsgdt, 80, MPI_CHAR, 0, tagmpi,
+  213.                                  MPI_COMM_WORLD);
+  214.                      }
+  215.                      else if (mype == 0) {
+  216.                          char cmsgdt[80];
+  217.                          MPI_Status status;
+  218.  +                       MPI_Recv(cmsgdt, 80, MPI_CHAR, pedt, tagmpi,
+  219.                                  MPI_COMM_WORLD, &status);
+  220.                          cmsgdt[79] = '\0';
+  221.  +                       msgdt = string(cmsgdt);
+  222.                      }
+  223.                  }  // if pedt > 0
+  224.              
+  225.                  // if timestep was determined by hydro, report which PE
+  226.                  // caused it
+  227.  + Ip            if (mype == 0 && msgdt.substr(0, 5) == "Hydro") {
+  228.  +                   ostringstream oss;
+  229.  +                   oss << "PE " << pedt << ", " << msgdt;
+  230.  +                   msgdt = oss.str();
+  231.  +               }
+  232.              #endif
+  233.              
+  234.              }
+  235.              
+
+CC-3021 CC: IPA __sti___2159318d_dfc4ed9c, File = iostream, Line = 74, Column = 25 
+  "Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 35, Column = 11 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 35, Column = 27 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 35, Column = 27 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 40, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 40, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 41, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 41, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 42, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 42, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 43, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 46, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 46, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 46, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 46, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 49, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 49, Column = 9 
+  "omp_get_max_threads" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 49, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 49, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 49, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 54, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 54, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 54, Column = 5 
+  "getInt" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 54, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 54, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 55, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 55, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 55, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 55, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 55, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 58, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 58, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 59, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 61, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 61, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 61, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 61, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 61, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 62, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 62, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 62, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 62, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 62, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 63, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 63, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 63, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 63, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 63, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 64, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 64, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 64, Column = 5 
+  "getInt" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 64, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 64, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 67, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 67, Column = 5 
+  "Mesh" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 68, Column = 5 
+  "operator new" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA Driver, File = Driver.cc, Line = 68, Column = 5 
+  "Hydro" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA ~Driver, File = Driver.cc, Line = 74, Column = 5 
+  "~Hydro" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Driver, File = Driver.cc, Line = 74, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:615) was textually inlined and flattened.
+
+CC-3021 CC: IPA ~Driver, File = Driver.cc, Line = 75, Column = 5 
+  "~Mesh" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~Driver, File = Driver.cc, Line = 75, Column = 5 
+  Tiny routine "operator delete"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:615) was textually inlined and flattened.
+
+CC-3021 CC: IPA ~Driver, File = Driver.cc, Line = 77, Column = 1 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA ~Driver, File = Driver.cc, Line = 77, Column = 1 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA ~Driver, File = Driver.cc, Line = 77, Column = 1 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 86, Column = 5 
+  "writeEnergyCheck" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 88, Column = 20 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 92, Column = 9 
+  "gettimeofday" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR run, File = Driver.cc, Line = 98 
+  A loop was not vectorized because it contains a call to function "std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>::operator =" on line 103.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 103, Column = 9 
+  Tiny routine "calcGlobalDt"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:163) was textually inlined.  NOT INLINED: 
+  operator= : operator= : substr : compare : ~basic_string : basic_string : size : reserve : append : append : getDtHydro.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 106, Column = 9 
+  "doCycle" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 113, Column = 13 
+  "gettimeofday" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 117, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 117, Column = 13 
+  Tiny leaf routine "setprecision"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:195) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 117, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 118, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 122, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 122, Column = 13 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 122, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 133, Column = 9 
+  "gettimeofday" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 138, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 139, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 139, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 140, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 140, Column = 9 
+  Tiny leaf routine "setprecision"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:195) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 140, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 141, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 143, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 146, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 147, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 147, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 148, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA run, File = Driver.cc, Line = 148, Column = 9 
+  Tiny leaf routine "setw"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:225) was textually inlined.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 148, Column = 9 
+  "operator<<<char, char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 148, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 148, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 149, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 149, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 154, Column = 5 
+  "writeEnergyCheck" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA run, File = Driver.cc, Line = 157, Column = 5 
+  "write" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 169, Column = 5 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 173, Column = 5 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 179, Column = 13 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 186, Column = 13 
+  "substr" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA calcGlobalDt, File = Driver.cc, Line = 186, Column = 13 
+  Tiny routine "operator==<char, char_traits<char>, allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:6043)
+  was textually inlined.  NOT INLINED:  compare.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 186, Column = 13 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 187, Column = 17 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA calcGlobalDt, File = Driver.cc, Line = 189, Column = 17 
+  Tiny routine "operator+<char, char_traits<char>, allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:1157)
+  was textually inlined.  NOT INLINED:  basic_string : size : reserve : append : append : ~basic_string.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 189, Column = 17 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 189, Column = 17 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 196, Column = 9 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 200, Column = 5 
+  "getDtHydro" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 204, Column = 5 
+  "globalMinLoc" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 211, Column = 13 
+  "c_str" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 211, Column = 13 
+  "strncpy" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 212, Column = 13 
+  "MPI_Send" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 218, Column = 13 
+  "MPI_Recv" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 221, Column = 13 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 221, Column = 13 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 221, Column = 13 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 221, Column = 13 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 221, Column = 13 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 227, Column = 5 
+  "substr" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA calcGlobalDt, File = Driver.cc, Line = 227, Column = 5 
+  Tiny routine "operator==<char, char_traits<char>, allocator<char>>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Driver.cc:6043)
+  was textually inlined.  NOT INLINED:  compare.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 227, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 228, Column = 23 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 229, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 229, Column = 9 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 229, Column = 9 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 229, Column = 9 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 230, Column = 9 
+  "str" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 230, Column = 9 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 230, Column = 9 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA calcGlobalDt, File = Driver.cc, Line = 231, Column = 5 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

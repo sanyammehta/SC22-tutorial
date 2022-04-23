@@ -1,0 +1,592 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/InputFile.o src/InputFile.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc
+Date     : 06/04/2020  18:09:48
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.                 /*
+    2.                  * InputFile.cc
+    3.                  *
+    4.                  *  Created on: Mar 20, 2012
+    5.                  *      Author: cferenba
+    6.                  *
+    7.                  * Copyright (c) 2012, Triad National Security, LLC.
+    8.                  * All rights reserved.
+    9.                  * Use of this source code is governed by a BSD-style open-source
+   10.                  * license; see top-level LICENSE file for full license text.
+   11.                  */
+   12.                 
+   13.                 #include "InputFile.hh"
+   14.                 
+   15.                 #include <string>
+   16.                 #include <iostream>
+   17.                 #include <fstream>
+   18.                 #include <sstream>
+   19.                 #include <cstdlib>
+   20.                 
+   21.                 #include "Parallel.hh"
+   22.                 
+   23.                 using namespace std;
+   24.                 
+   25.                 
+   26.    Ip           InputFile::InputFile(const char* filename) {
+   27.                 
+   28.                     using Parallel::mype;
+   29.                 
+   30.  + Ip               ifstream ifs(filename);
+   31.  +                  if (!ifs.good())
+   32.                     {
+   33.                         if (mype == 0)
+   34.  +                          cerr << "File " << filename << " not found" << endl;
+   35.  +                      exit(1);
+   36.                     }
+   37.                 
+   38.  + 1----------<     while (true)
+   39.    1                {
+   40.  + 1                    string line;
+   41.  + 1                    getline(ifs, line);
+   42.  + 1                    if (ifs.eof()) break;
+   43.    1            
+   44.  + 1                    istringstream iss(line);
+   45.  + 1                    string key;
+   46.    1            
+   47.  + 1                    iss >> key;
+   48.  + 1                    if (key.empty() || key[0] == '#')
+   49.  + 1                      continue;
+   50.    1            
+   51.  + 1 I                  if (pairs.find(key) != pairs.end()) {
+   52.    1                        if (mype == 0)
+   53.  + 1                            cerr << "Duplicate key " << key << " in input file" << endl;
+   54.  + 1                        exit(1);
+   55.    1                    }
+   56.    1            
+   57.  + 1                    string val;
+   58.  + 1                    getline(iss, val);
+   59.  + 1                    pairs[key] = val;
+   60.    1            
+   61.  + 1---------->     } // while true
+   62.                 
+   63.  +                  ifs.close();
+   64.                 
+   65.                 }
+   66.                 
+   67.                 
+   68.  + Ip           InputFile::~InputFile() {}
+   69.                 
+   70.                 
+   71.                 template <typename T>
+   72.                 T InputFile::get(const string& key, const T& dflt) const {
+   73.  +                  pairstype::const_iterator itr = pairs.find(key);
+   74.    I                if (itr == pairs.end())
+   75.  +                      return dflt;
+   76.  + I                istringstream iss(itr->second);
+   77.  + Ip  I            T val;
+   78.  +                  iss >> val;
+   79.  +                  return val;
+   80.                 }
+   81.                 
+   82.                 
+   83.                 int InputFile::getInt(const string& key, const int dflt) const {
+   84.  +                  return get(key, dflt);
+   85.                 }
+   86.                 
+   87.                 
+   88.                 double InputFile::getDouble(const string& key, const double dflt) const {
+   89.  +                  return get(key, dflt);
+   90.                 }
+   91.                 
+   92.                 
+   93.                 string InputFile::getString(const string& key, const string& dflt) const {
+   94.  +                  return get(key, dflt);
+   95.                 }
+   96.                 
+   97.                 
+   98.                 vector<double> InputFile::getDoubleList(
+   99.                         const string& key,
+  100.                         const vector<double>& dflt) const {
+  101.  +                  pairstype::const_iterator itr = pairs.find(key);
+  102.    I                if (itr == pairs.end())
+  103.  +                      return dflt;
+  104.  + I                istringstream iss(itr->second);
+  105.    Ip               vector<double> vallist;
+  106.                     double val;
+  107.  + 1---------<>     while (iss >> val) vallist.push_back(val);
+  108.  + Ip               return vallist;
+  109.                 }
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:476) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = move.h, Line = 193, Column = 11 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA get<int>, File = move.h, Line = 193, Column = 11 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 128, Column = 18 
+  Tiny routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:104) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3118 CC: IPA <unnamed>, File = stl_uninitialized.h, Line = 128, Column = 18 
+  "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:458) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6287 CC: VECTOR lower_bound, File = stl_tree.h, Line = 1203 
+  A loop was not vectorized because it contains a call to function "std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>::compare" on line 1203.
+
+CC-6287 CC: VECTOR _M_erase, File = stl_tree.h, Line = 1870 
+  A loop was not vectorized because it contains a call to function "std::_Rb_tree<std::__cxx11::basic_string<char,
+  std::char_traits<char>, std::allocator<char>>, std::pair<const std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>,
+  std::_Select1st<std::pair<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>,
+  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>>, std::less<std::__cxx11::basic_string<char,
+  std::char_traits<char>, std::allocator<char>>>, std::allocator<std::pair<const std::__cxx11::basic_string<char,
+  std::char_traits<char>, std::allocator<char>>, std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>>>>::_M_erase" on line 1872.
+
+CC-6287 CC: VECTOR _M_lower_bound, File = stl_tree.h, Line = 1903 
+  A loop was not vectorized because it contains a call to function "std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>::compare" on line 1904.
+
+CC-6287 CC: VECTOR _M_get_insert_unique_pos, File = stl_tree.h, Line = 2051 
+  A loop was not vectorized because it contains a call to function "std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>::compare" on line 2054.
+
+CC-3001 CC: IPA <unnamed>, File = stl_tree.h, Line = 2414, Column = 13 
+  Tiny leaf routine "_Rb_tree_const_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:348) was textually
+  inlined.
+
+CC-6287 CC: VECTOR find, File = stl_tree.h, Line = 2552 
+  A loop was not vectorized because it contains a call to function "std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>::compare" on line 2552.
+
+CC-6287 CC: VECTOR operator[], File = stl_map.h, Line = 495 
+  A loop was not vectorized because it contains a call to function "std::_Select1st<std::pair<const
+  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>, std::__cxx11::basic_string<char,
+  std::char_traits<char>, std::allocator<char>>>>::operator ()" on line 495.
+
+CC-3021 CC: IPA __sti___ebd05f46_ed3df548, File = iostream, Line = 74, Column = 25 
+  "Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny routine "_Rb_tree"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:929) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny routine "~_Rb_tree_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:692) was textually inlined.  NOT
+  INLINED:  __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny routine "map"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:183) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny routine "~map"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:300) was textually inlined.  NOT INLINED: 
+  _M_erase : __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3039 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  "_M_erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:300) was not inlined because there is a recursive call.
+
+CC-3021 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  Tiny routine "~map"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:300) was textually inlined.  NOT INLINED: 
+  _M_erase : __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3039 CC: IPA InputFile, File = mpicxx.h, Line = 2478, Column = 19 
+  "_M_erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:300) was not inlined because there is a recursive call.
+
+CC-3118 CC: IPA <unnamed>, File = mpicxx.h, Line = 2478, Column = 19 
+  "InputFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:26) was not inlined because the call site will not
+  flatten.  "_ZNSt14basic_ifstreamIcSt11char_traitsIcEED1Ev" is missing.
+
+CC-3001 CC: IPA InputFile, File = InputFile.cc, Line = 26, Column = 44 
+  Tiny routine "map"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:183) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 30, Column = 14 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA <unnamed>, File = InputFile.cc, Line = 30, Column = 14 
+  Tiny routine "~InputFile"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:68) was textually inlined.  NOT INLINED: 
+  _M_erase : __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3039 CC: IPA <unnamed>, File = InputFile.cc, Line = 30, Column = 14 
+  "_M_erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:68) was not inlined because there is a recursive call.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 30, Column = 14 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 30, Column = 14 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 31, Column = 5 
+  "good" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 34, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 34, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 34, Column = 13 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 34, Column = 13 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 35, Column = 9 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR InputFile, File = InputFile.cc, Line = 38 
+  A loop was not vectorized because it contains a call to function "std::basic_ios<char, std::char_traits<char>>::eof" on line 42.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 40, Column = 16 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 41, Column = 9 
+  "getline<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 42, Column = 9 
+  "eof" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 42, Column = 24 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 44, Column = 23 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 45, Column = 16 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 47, Column = 9 
+  "operator>><char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 48, Column = 9 
+  "empty" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 48, Column = 9 
+  "operator[]" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 49, Column = 11 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 49, Column = 11 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 49, Column = 11 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-6287 CC: VECTOR InputFile, File = InputFile.cc, Line = 51 
+  A loop was not vectorized because it contains a call to function "std::__cxx11::basic_string<char, std::char_traits<char>,
+  std::allocator<char>>::compare" on line 51.
+
+CC-3001 CC: IPA InputFile, File = InputFile.cc, Line = 51, Column = 9 
+  Tiny routine "find"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1169) was textually inlined.  NOT INLINED: 
+  compare : __cxa_call_unexpected : operator() : operator().
+
+CC-3165 CC: IPA InputFile, File = InputFile.cc, Line = 51, Column = 9 
+  "operator()"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1169) was not inlined because of deferred implementation
+  - type locked 2.
+
+CC-3001 CC: IPA InputFile, File = InputFile.cc, Line = 51, Column = 9 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:372) was textually inlined and flattened.
+
+CC-3001 CC: IPA InputFile, File = InputFile.cc, Line = 51, Column = 9 
+  Tiny leaf routine "operator!="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:319) was textually inlined.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 53, Column = 17 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 53, Column = 17 
+  "operator<<<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 53, Column = 17 
+  "operator<<<char_traits<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 53, Column = 17 
+  "operator<<" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 54, Column = 13 
+  "exit" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 57, Column = 16 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 58, Column = 9 
+  "getline<char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA InputFile, File = InputFile.cc, Line = 59, Column = 9 
+  "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:490) was not inlined because the call site will not
+  flatten.  "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev" is missing.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 59, Column = 9 
+  "operator=" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 61, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 61, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 61, Column = 5 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 61, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA InputFile, File = InputFile.cc, Line = 63, Column = 5 
+  "close" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA ~InputFile, File = InputFile.cc, Line = 68, Column = 26 
+  Tiny routine "~map"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:300) was textually inlined.  NOT INLINED: 
+  _M_erase : __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3039 CC: IPA ~InputFile, File = InputFile.cc, Line = 68, Column = 26 
+  "_M_erase"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:300) was not inlined because there is a recursive call.
+
+CC-3118 CC: IPA get<string>, File = InputFile.cc, Line = 73, Column = 35 
+  "find"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1194) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3118 CC: IPA get<int>, File = InputFile.cc, Line = 73, Column = 35 
+  "find"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1194) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3118 CC: IPA get<double>, File = InputFile.cc, Line = 73, Column = 35 
+  "find"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1194) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA get<string>, File = InputFile.cc, Line = 74, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:381) was textually inlined and flattened.
+
+CC-3001 CC: IPA get<string>, File = InputFile.cc, Line = 74, Column = 5 
+  Tiny leaf routine "operator=="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:394) was textually inlined.
+
+CC-3001 CC: IPA get<int>, File = InputFile.cc, Line = 74, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:381) was textually inlined and flattened.
+
+CC-3001 CC: IPA get<int>, File = InputFile.cc, Line = 74, Column = 5 
+  Tiny leaf routine "operator=="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:394) was textually inlined.
+
+CC-3001 CC: IPA get<double>, File = InputFile.cc, Line = 74, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:381) was textually inlined and flattened.
+
+CC-3001 CC: IPA get<double>, File = InputFile.cc, Line = 74, Column = 5 
+  Tiny leaf routine "operator=="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:394) was textually inlined.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 75, Column = 9 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<double>, File = InputFile.cc, Line = 76, Column = 19 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA get<int>, File = InputFile.cc, Line = 76, Column = 19 
+  Tiny routine "operator->"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:360) was textually inlined and flattened.
+
+CC-3001 CC: IPA get<string>, File = InputFile.cc, Line = 76, Column = 19 
+  Tiny routine "operator->"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:360) was textually inlined and flattened.
+
+CC-3001 CC: IPA get<double>, File = InputFile.cc, Line = 76, Column = 19 
+  Tiny routine "operator->"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:360) was textually inlined and flattened.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 76, Column = 19 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<int>, File = InputFile.cc, Line = 76, Column = 19 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<double>, File = InputFile.cc, Line = 77, Column = 7 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 77, Column = 7 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 77, Column = 7 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 77, Column = 7 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA <unnamed>, File = InputFile.cc, Line = 77, Column = 7 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:95) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = InputFile.cc, Line = 77, Column = 7 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA get<double>, File = InputFile.cc, Line = 78, Column = 5 
+  "operator>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 78, Column = 5 
+  "operator>><char, char_traits<char>, allocator<char>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<int>, File = InputFile.cc, Line = 78, Column = 5 
+  "operator>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<double>, File = InputFile.cc, Line = 79, Column = 5 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 79, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 79, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<string>, File = InputFile.cc, Line = 79, Column = 5 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA get<int>, File = InputFile.cc, Line = 79, Column = 5 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA getInt, File = InputFile.cc, Line = 84, Column = 5 
+  "get<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:72) was not inlined because the call site will not flatten.
+   "_ZNSt7__cxx1119basic_istringstreamIcSt11char_traitsIcESaIcEED1Ev" is missing.
+
+CC-3118 CC: IPA getDouble, File = InputFile.cc, Line = 89, Column = 5 
+  "get<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:72) was not inlined because the call site will not
+  flatten.  "_ZNSt7__cxx1119basic_istringstreamIcSt11char_traitsIcESaIcEED1Ev" is missing.
+
+CC-3118 CC: IPA getString, File = InputFile.cc, Line = 94, Column = 5 
+  "get<string>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:72) was not inlined because the call site will not
+  flatten.  "_ZNSt7__cxx1119basic_istringstreamIcSt11char_traitsIcESaIcEED1Ev" is missing.
+
+CC-3118 CC: IPA getDoubleList, File = InputFile.cc, Line = 101, Column = 35 
+  "find"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1194) was not inlined because the call site will not flatten. 
+  "__cxa_call_unexpected" is missing.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 102, Column = 5 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:381) was textually inlined and flattened.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 102, Column = 5 
+  Tiny leaf routine "operator=="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:394) was textually inlined.
+
+CC-3118 CC: IPA getDoubleList, File = InputFile.cc, Line = 103, Column = 9 
+  "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:458) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 104, Column = 19 
+  Tiny routine "operator->"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:360) was textually inlined and flattened.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 104, Column = 19 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 105, Column = 20 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6287 CC: VECTOR getDoubleList, File = InputFile.cc, Line = 107 
+  A loop was not vectorized because it contains a call to function "std::vector<double, std::allocator<double>>::push_back" on line
+  107.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 107, Column = 5 
+  "operator>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 107, Column = 5 
+  "operator bool" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 107, Column = 5 
+  "operator>>" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 107, Column = 5 
+  "operator bool" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA getDoubleList, File = InputFile.cc, Line = 107, Column = 24 
+  "push_back"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:1074) was not inlined because the call site will not
+  flatten.  "_Znwm" is missing.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 108, Column = 5 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:476) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected : __cxa_call_unexpected.
+
+CC-3001 CC: IPA getDoubleList, File = InputFile.cc, Line = 108, Column = 5 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/InputFile.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3021 CC: IPA getDoubleList, File = InputFile.cc, Line = 108, Column = 5 
+  "<unnamed>" was not inlined because the compiler was unable to locate the routine.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -1,0 +1,195 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/TTS.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/TTS.o src/TTS.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/TTS.cc
+Date     : 06/04/2020  18:09:46
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.               /*
+    2.                * TTS.cc
+    3.                *
+    4.                *  Created on: Feb 2, 2012
+    5.                *      Author: cferenba
+    6.                *
+    7.                * Copyright (c) 2012, Triad National Security, LLC.
+    8.                * All rights reserved.
+    9.                * Use of this source code is governed by a BSD-style open-source
+   10.                * license; see top-level LICENSE file for full license text.
+   11.                */
+   12.               
+   13.               #include "TTS.hh"
+   14.               
+   15.               #include "Vec2.hh"
+   16.               #include "InputFile.hh"
+   17.               #include "Mesh.hh"
+   18.               #include "Hydro.hh"
+   19.               
+   20.               using namespace std;
+   21.               
+   22.               
+   23.               TTS::TTS(const InputFile* inp, Hydro* h) : hydro(h) {
+   24.  +                alfa = inp->getDouble("alfa", 0.5);
+   25.  +                ssmin = inp->getDouble("ssmin", 0.);
+   26.               
+   27.               }
+   28.               
+   29.               
+   30.               TTS::~TTS() {}
+   31.               
+   32.               
+   33.               void TTS::calcForce(
+   34.                       const double* zarea,
+   35.                       const double* zr,
+   36.                       const double* zss,
+   37.                       const double* sarea,
+   38.                       const double* smf,
+   39.                       const double2* ssurfp,
+   40.                       double2* sf,
+   41.                       const int sfirst,
+   42.                       const int slast) {
+   43.               
+   44.                   //  Side density:
+   45.                   //    srho = sm/sv = zr (sm/zm) / (sv/zv)
+   46.                   //  Side pressure:
+   47.                   //    sp   = zp + alfa dpdr (srho-zr)
+   48.                   //         = zp + sdp
+   49.                   //  Side delta pressure:
+   50.                   //    sdp  = alfa dpdr (srho-zr)
+   51.                   //         = alfa c**2 (srho-zr)
+   52.                   //
+   53.                   //    Notes: smf stores (sm/zm)
+   54.                   //           svfac stores (sv/zv)
+   55.               
+   56.                   const Mesh* mesh = hydro->mesh;
+   57.               
+   58.                   #pragma ivdep
+   59.  + VFr2-----<     for (int s = sfirst; s < slast; ++s) {
+   60.    VFr2               int z = mesh->mapsz[s];
+   61.    VFr2       
+   62.    VFr2               double svfacinv = zarea[z] / sarea[s];
+   63.    VFr2               double srho = zr[z] * smf[s] * svfacinv;
+   64.    VFr2 I             double sstmp = max(zss[z], ssmin);
+   65.    VFr2               sstmp = alfa * sstmp * sstmp;
+   66.    VFr2               double sdp = sstmp * (srho - zr[z]);
+   67.    VFr2 I             double2 sqq = -sdp * ssurfp[s];
+   68.    VFr2 I             sf[s] = sqq;
+   69.    VFr2       
+   70.    VFr2----->     }
+   71.               
+   72.               }
+   73.               
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 24, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 24, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 24, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 24, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 24, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 25, Column = 5 
+  "allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 25, Column = 5 
+  "basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 25, Column = 5 
+  "getDouble" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 25, Column = 5 
+  "~basic_string" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA TTS, File = TTS.cc, Line = 25, Column = 5 
+  "~allocator" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR calcForce, File = TTS.cc, Line = 59 
+  A loop was unrolled 2 times.
+
+CC-6204 CC: VECTOR calcForce, File = TTS.cc, Line = 59 
+  A loop was vectorized.
+
+CC-3182 CC: IPA calcForce, File = TTS.cc, Line = 59, Column = 5 
+  Loop has been flattened.
+
+CC-3001 CC: IPA calcForce, File = TTS.cc, Line = 64, Column = 22 
+  Tiny leaf routine "max<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/TTS.cc:219) was textually inlined.
+
+CC-3001 CC: IPA calcForce, File = TTS.cc, Line = 67, Column = 17 
+  Tiny routine "operator*"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/TTS.cc:125) was textually inlined and flattened.
+
+CC-3001 CC: IPA calcForce, File = TTS.cc, Line = 68, Column = 9 
+  Tiny leaf routine "operator="(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/TTS.cc:31) was textually inlined.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

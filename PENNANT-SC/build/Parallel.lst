@@ -1,0 +1,541 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S u m m a r y   R e p o r t
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Compilation
+-----------
+File     : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc
+Compiled : 2020-06-04  18:09:44
+Compiler : Version 10.0.x.x
+Ftnlx    : Version 10.0.x.x 
+Target   : arm64
+Command  : driver.CC -h cpu=arm-nsp1 -h network=aries -h dynamic -D __CRAYXC
+           -D __CRAY_ARM_NSP1 -D __CRAY_AARCH64
+           -D __CRAYXT_COMPUTE_LINUX_TARGET -h list=m -h omp -D USE_MPI -h omp
+           -c -o build/Parallel.o src/Parallel.cc
+           -W l,-rpath=/cray/css/compiler/builds/release/cce/10.0.20200603211505
+           _15e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/lib
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/craylibs
+           -isystem /opt/gcc/8.1.0/snos/include/g++
+           -isystem /opt/gcc/8.1.0/snos/include/g++/aarch64-unknown-linux-gnu
+           -isystem /opt/gcc/8.1.0/snos/include/g++/backward
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include
+           -isystem /opt/gcc/8.1.0/snos/lib/gcc/aarch64-unknown-linux-gnu/8.1.0/
+           include-fixed
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/c++
+           -isystem /cray/css/compiler/builds/release/cce/10.0.20200603211505_15
+           e263491fba367aa4f23381e4b9aafeb285582e/cce/aarch64/include/basic
+           -isystem /opt/gcc/8.1.0/snos/include
+           -isystem /cray/css/pesim/armv8-sve-cross/moduledirs/aarch64-sle-sysro
+           ot/12.1/usr/include
+           -I /cray/css/pesim/armv8-sve-cross/moduledirs/anl-mpich/3.2.0.4/aarch
+           64/gige/mpich-cray/8.6/include
+
+clx report
+------------
+Source   : /cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc
+Date     : 06/04/2020  18:09:47
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                          S o u r c e   L i s t i n g
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+     %%%    L o o p m a r k   L e g e n d    %%%
+
+     Primary Loop Type        Modifiers
+     ------- ---- ----        ---------
+     A - Pattern matched      a - atomic memory operation
+                              b - blocked
+     C - Collapsed            c - conditional and/or computed
+     D - Deleted               
+     E - Cloned                
+     F - Flat - No calls      f - fused
+     G - Accelerated          g - partitioned
+     I - Inlined              i - interchanged
+     M - Multithreaded        m - partitioned
+                              n - non-blocking remote transfer
+                              p - partial
+     R - Rerolling            r - unrolled
+                              s - shortloop
+     V - Vectorized           w - unwound
+
+     + - More messages listed at end of listing
+     ------------------------------------------
+
+
+    1.                    /*
+    2.                     * Parallel.cc
+    3.                     *
+    4.                     *  Created on: May 31, 2013
+    5.                     *      Author: cferenba
+    6.                     *
+    7.                     * Copyright (c) 2013, Triad National Security, LLC.
+    8.                     * All rights reserved.
+    9.                     * Use of this source code is governed by a BSD-style open-source
+   10.                     * license; see top-level LICENSE file for full license text.
+   11.                     */
+   12.                    
+   13.                    #include "Parallel.hh"
+   14.                    
+   15.                    #include <vector>
+   16.                    #include <algorithm>
+   17.                    #include <numeric>
+   18.                    
+   19.                    #include "Vec2.hh"
+   20.                    
+   21.                    
+   22.                    namespace Parallel {
+   23.                    
+   24.                    #ifdef USE_MPI
+   25.                    // We're running under MPI, so set these to dummy values
+   26.                    // that will be overwritten on MPI_Init.
+   27.                    int numpe = 0;
+   28.                    int mype = -1;
+   29.                    #else
+   30.                    // We're in serial mode, so only 1 PE.
+   31.                    int numpe = 1;
+   32.                    int mype = 0;
+   33.                    #endif
+   34.                    
+   35.                    
+   36.                    void init() {
+   37.                    #ifdef USE_MPI
+   38.  +                     MPI_Init(0, 0);
+   39.  +                     MPI_Comm_size(MPI_COMM_WORLD, &numpe);
+   40.  +                     MPI_Comm_rank(MPI_COMM_WORLD, &mype);
+   41.                    #endif
+   42.                    }  // init
+   43.                    
+   44.                    
+   45.                    void final() {
+   46.                    #ifdef USE_MPI
+   47.  +                     MPI_Finalize();
+   48.                    #endif
+   49.                    }  // final
+   50.                    
+   51.                    
+   52.                    void globalMinLoc(double& x, int& xpe) {
+   53.                        if (numpe == 1) {
+   54.                            xpe = 0;
+   55.                            return;
+   56.                        }
+   57.                    #ifdef USE_MPI
+   58.                        struct doubleInt {
+   59.                            double d;
+   60.                            int i;
+   61.                        } xdi, ydi;
+   62.                        xdi.d = x;
+   63.                        xdi.i = mype;
+   64.  +                     MPI_Allreduce(&xdi, &ydi, 1, MPI_DOUBLE_INT, MPI_MINLOC,
+   65.                                MPI_COMM_WORLD);
+   66.                        x = ydi.d;
+   67.                        xpe = ydi.i;
+   68.                    #endif
+   69.                    }
+   70.                    
+   71.                    
+   72.                    void globalSum(int& x) {
+   73.                        if (numpe == 1) return;
+   74.                    #ifdef USE_MPI
+   75.                        int y;
+   76.  +                     MPI_Allreduce(&x, &y, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+   77.                        x = y;
+   78.                    #endif
+   79.                    }
+   80.                    
+   81.                    
+   82.                    void globalSum(int64_t& x) {
+   83.                        if (numpe == 1) return;
+   84.                    #ifdef USE_MPI
+   85.                        int64_t y;
+   86.  +                     MPI_Allreduce(&x, &y, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+   87.                        x = y;
+   88.                    #endif
+   89.                    }
+   90.                    
+   91.                    
+   92.                    void globalSum(double& x) {
+   93.                        if (numpe == 1) return;
+   94.                    #ifdef USE_MPI
+   95.                        double y;
+   96.  +                     MPI_Allreduce(&x, &y, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+   97.                        x = y;
+   98.                    #endif
+   99.                    }
+  100.                    
+  101.                    
+  102.                    void gather(int x, int* y) {
+  103.                        if (numpe == 1) {
+  104.                            y[0] = x;
+  105.                            return;
+  106.                        }
+  107.                    #ifdef USE_MPI
+  108.  +                     MPI_Gather(&x, 1, MPI_INT, y, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  109.                    #endif
+  110.                    }
+  111.                    
+  112.                    
+  113.                    void scatter(const int* x, int& y) {
+  114.                        if (numpe == 1) {
+  115.                            y = x[0];
+  116.                            return;
+  117.                        }
+  118.                    #ifdef USE_MPI
+  119.  +                     MPI_Scatter((void*) x, 1, MPI_INT, &y, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  120.                    #endif
+  121.                    }
+  122.                    
+  123.                    
+  124.                    template<typename T>
+  125.                    void gathervImpl(
+  126.                            const T *x, const int numx,
+  127.                            T* y, const int* numy) {
+  128.                    
+  129.                        if (numpe == 1) {
+  130.    Vcr4 I-------<>         std::copy(x, x + numx, y);
+  131.                            return;
+  132.                        }
+  133.                    #ifdef USE_MPI
+  134.                        const int type_size = sizeof(T);
+  135.                        int sendcount = type_size * numx;
+  136.    Ip                  std::vector<int> recvcount, disp;
+  137.                        if (mype == 0) {
+  138.  +                         recvcount.resize(numpe);
+  139.  + F-------------<         for (int pe = 0; pe < numpe; ++pe) {
+  140.    F I                         recvcount[pe] = type_size * numy[pe];
+  141.    F------------->         }
+  142.                            // exclusive scan isn't available in the standard library,
+  143.                            // so we use an inclusive scan and displace it by one place
+  144.  +                         disp.resize(numpe + 1);
+  145.  + r4 I---------<>         std::partial_sum(recvcount.begin(), recvcount.end(), &disp[1]);
+  146.                        } // if mype
+  147.                    
+  148.  + I                   MPI_Gatherv((void*) x, sendcount, MPI_BYTE,
+  149.                                y, &recvcount[0], &disp[0], MPI_BYTE,
+  150.                                0, MPI_COMM_WORLD);
+  151.                    #endif
+  152.                    
+  153.                    }
+  154.                    
+  155.                    
+  156.                    template<>
+  157.                    void gatherv(
+  158.                            const double2 *x, const int numx,
+  159.                            double2* y, const int* numy) {
+  160.  +                     gathervImpl(x, numx, y, numy);
+  161.                    }
+  162.                    
+  163.                    
+  164.                    template<>
+  165.                    void gatherv(
+  166.                            const double *x, const int numx,
+  167.                            double* y, const int* numy) {
+  168.  +                     gathervImpl(x, numx, y, numy);
+  169.                    }
+  170.                    
+  171.                    
+  172.                    template<>
+  173.                    void gatherv(
+  174.                            const int *x, const int numx,
+  175.                            int* y, const int* numy) {
+  176.  +                     gathervImpl(x, numx, y, numy);
+  177.                    }
+  178.                    
+  179.                    
+  180.                    }  // namespace Parallel
+  181.                    
+
+CC-6005 CC: SCALAR __copy_m<const double2 *, double2 *>, File = stl_algobase.h, Line = 322 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR __copy_m<const double2 *, double2 *>, File = stl_algobase.h, Line = 322 
+  A loop was conditionally vectorized.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "_Vector_base"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:248) was textually inlined and flattened.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "~_Vector_base"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:283) was textually inlined and flattened.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny leaf routine "_Vector_impl"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:95) was textually inlined.
+
+CC-3001 CC: IPA <unnamed>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<double>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<double>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<int>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<int>, File = stl_algobase.h, Line = 380, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6005 CC: SCALAR copy<const double2 *, double2 *>, File = stl_algobase.h, Line = 454 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR copy<const double2 *, double2 *>, File = stl_algobase.h, Line = 454 
+  A loop was conditionally vectorized.
+
+CC-6254 CC: VECTOR __uninit_default_n<pointer, size_type>, File = stl_uninitialized.h, Line = 548 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 548.
+
+CC-3001 CC: IPA <unnamed>, File = stl_vector.h, Line = 1640, Column = 18 
+  Tiny leaf routine "move_iterator"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:1030) was textually inlined.
+
+CC-6254 CC: VECTOR _M_default_append, File = vector.tcc, Line = 595 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 595.
+
+CC-6254 CC: VECTOR _M_default_append, File = vector.tcc, Line = 613 
+  A loop was not vectorized because a recurrence was found on "__niter" at line 613.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = stl_numeric.h, Line = 250, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = stl_numeric.h, Line = 250, Column = 18 
+  Tiny routine "~vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:565) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-6005 CC: SCALAR partial_sum<iterator, value_type *>, File = stl_numeric.h, Line = 252 
+  A loop was unrolled 4 times.
+
+CC-6291 CC: VECTOR partial_sum<iterator, value_type *>, File = stl_numeric.h, Line = 252 
+  A loop was not vectorized because a recurrence was found between "__first" at line 254 and "__result" at line 255.
+
+CC-3021 CC: IPA init, File = Parallel.cc, Line = 38, Column = 5 
+  "MPI_Init" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA init, File = Parallel.cc, Line = 39, Column = 5 
+  "MPI_Comm_size" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA init, File = Parallel.cc, Line = 40, Column = 5 
+  "MPI_Comm_rank" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA final, File = Parallel.cc, Line = 47, Column = 5 
+  "MPI_Finalize" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA globalMinLoc, File = Parallel.cc, Line = 64, Column = 5 
+  "MPI_Allreduce" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA globalSum, File = Parallel.cc, Line = 76, Column = 5 
+  "MPI_Allreduce" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA globalSum, File = Parallel.cc, Line = 86, Column = 5 
+  "MPI_Allreduce" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA globalSum, File = Parallel.cc, Line = 96, Column = 5 
+  "MPI_Allreduce" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA gather, File = Parallel.cc, Line = 108, Column = 5 
+  "MPI_Gather" was not inlined because the compiler was unable to locate the routine.
+
+CC-3021 CC: IPA scatter, File = Parallel.cc, Line = 119, Column = 5 
+  "MPI_Scatter" was not inlined because the compiler was unable to locate the routine.
+
+CC-6005 CC: SCALAR gathervImpl<double2>, File = Parallel.cc, Line = 130 
+  A loop was unrolled 4 times.
+
+CC-6213 CC: VECTOR gathervImpl<double2>, File = Parallel.cc, Line = 130 
+  A loop was conditionally vectorized.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 130, Column = 9 
+  Tiny routine "copy<const double2 *, double2 *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:446) was textually
+  inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 130, Column = 9 
+  Tiny routine "copy<const double *, double *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:446) was textually
+  inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 130, Column = 9 
+  Tiny routine "copy<const int *, int *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:446) was textually inlined and
+  flattened.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 136, Column = 22 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 136, Column = 22 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 136, Column = 22 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 136, Column = 33 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 136, Column = 33 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 136, Column = 33 
+  Tiny routine "vector"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:391) was textually inlined.  NOT INLINED: 
+  __cxa_call_unexpected.
+
+CC-3118 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 138, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:824) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 138, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:824) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 138, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:824) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6291 CC: VECTOR gathervImpl<double2>, File = Parallel.cc, Line = 139 
+  A loop was not vectorized because a recurrence was found between "recvcount" at line 140 and "Parallel::numpe" at line 139.
+
+CC-6291 CC: VECTOR gathervImpl<double>, File = Parallel.cc, Line = 139 
+  A loop was not vectorized because a recurrence was found between "recvcount" at line 140 and "Parallel::numpe" at line 139.
+
+CC-6291 CC: VECTOR gathervImpl<int>, File = Parallel.cc, Line = 139 
+  A loop was not vectorized because a recurrence was found between "recvcount" at line 140 and "Parallel::numpe" at line 139.
+
+CC-3182 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 139, Column = 9 
+  Loop has been flattened.
+
+CC-3182 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 139, Column = 9 
+  Loop has been flattened.
+
+CC-3182 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 139, Column = 9 
+  Loop has been flattened.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 140, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 140, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 140, Column = 13 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3118 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 144, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:824) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 144, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:824) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-3118 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 144, Column = 9 
+  "resize"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:824) was not inlined because the call site will not flatten. 
+  "_Znwm" is missing.
+
+CC-6005 CC: SCALAR gathervImpl<double2>, File = Parallel.cc, Line = 145 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR gathervImpl<double2>, File = Parallel.cc, Line = 145 
+  A loop was not vectorized because a recurrence was found between "recvcount" and "disp" at line 145.
+
+CC-6005 CC: SCALAR gathervImpl<double>, File = Parallel.cc, Line = 145 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR gathervImpl<double>, File = Parallel.cc, Line = 145 
+  A loop was not vectorized because a recurrence was found between "recvcount" and "disp" at line 145.
+
+CC-6005 CC: SCALAR gathervImpl<int>, File = Parallel.cc, Line = 145 
+  A loop was unrolled 4 times.
+
+CC-6290 CC: VECTOR gathervImpl<int>, File = Parallel.cc, Line = 145 
+  A loop was not vectorized because a recurrence was found between "recvcount" and "disp" at line 145.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "partial_sum<iterator, value_type *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:237) was textually
+  inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "partial_sum<iterator, value_type *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:237) was textually
+  inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "begin"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:698) was textually inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "end"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:716) was textually inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 145, Column = 9 
+  Tiny routine "partial_sum<iterator, value_type *>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:237) was textually
+  inlined and flattened.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 148, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 148, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3021 CC: IPA gathervImpl<double2>, File = Parallel.cc, Line = 148, Column = 5 
+  "MPI_Gatherv" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 148, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 148, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3021 CC: IPA gathervImpl<double>, File = Parallel.cc, Line = 148, Column = 5 
+  "MPI_Gatherv" was not inlined because the compiler was unable to locate the routine.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 148, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3001 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 148, Column = 5 
+  Tiny leaf routine "operator[]"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:930) was textually inlined.
+
+CC-3021 CC: IPA gathervImpl<int>, File = Parallel.cc, Line = 148, Column = 5 
+  "MPI_Gatherv" was not inlined because the compiler was unable to locate the routine.
+
+CC-3118 CC: IPA gatherv<double2>, File = Parallel.cc, Line = 160, Column = 5 
+  "gathervImpl<double2>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:125) was not inlined because the call site will
+  not flatten.  "__cxa_call_unexpected" is missing.
+
+CC-3118 CC: IPA gatherv<double>, File = Parallel.cc, Line = 168, Column = 5 
+  "gathervImpl<double>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:125) was not inlined because the call site will
+  not flatten.  "__cxa_call_unexpected" is missing.
+
+CC-3118 CC: IPA gatherv<int>, File = Parallel.cc, Line = 176, Column = 5 
+  "gathervImpl<int>"(/cray/css/users/smehta/PENNANT-SC/PENNANT/src/Parallel.cc:125) was not inlined because the call site will not
+  flatten.  "__cxa_call_unexpected" is missing.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

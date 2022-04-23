@@ -1,0 +1,25 @@
+The two files that show the difference from vectorization are QCS-without-ivdep.cc and QCS-with-ivdep.cc. They should be used instead of src/QCS.cc to see the difference from vectorization.
+
+Build instructions:
+
+The original Makefile is moved to Makefile.orig
+The Makefile that we used is copied in this directory - it invokes the Cray compiler and the relevant flags such as for enabling OpenMP and MPI
+So, to build, just type: 
+'make' or 'make -j'
+
+The binary 'pennant' is generated in the build/ directory. To generate the instrumented executable to use with CrayPat, type:
+cd build
+pat_build ./pennant
+
+This generates pennant+pat executable.
+
+Run instructions:
+
+For SKL:
+env OMP_NUM_THREADS=24 aprun -d 24 -n 1 --p-state=2100000 ./pennant+pat ../test/sedovflat/sedovflat.pnt
+env OMP_NUM_THREADS=48 aprun -d48 -j2 -n 1 --p-state=2100000 ./pennant+pat ../test/sedovflat/sedovflat.pnt
+
+For KNL (numactl --membind=1 forces allocation in MCDRAM when flat mode enabled):
+env OMP_NUM_THREADS=64 aprun -d64 -j1 -n1 --p-state=1401000 numactl --membind=1 ./pennant+pat ../test/sedovflat/sedovflat.pnt
+env OMP_NUM_THREADS=128 aprun -d128 -j2 -n1 --p-state=1401000 numactl --membind=1 ./pennant+pat ../test/sedovflat/sedovflat.pnt
+env OMP_NUM_THREADS=256 aprun -d256 -j4 -n1 --p-state=1401000 numactl --membind=1 ./pennant+pat ../test/sedovflat/sedovflat.pnt

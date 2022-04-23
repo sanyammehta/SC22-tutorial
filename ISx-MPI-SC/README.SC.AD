@@ -1,0 +1,20 @@
+The changes to isx.c (i.e. software prefetching) are reflected in isx-swp.c
+
+Build instructions:
+
+The Makefile has been updated to use Cray compiler specific flags - no special flags are used
+So, to build, just type:
+'make' or 'make -j'
+
+For ISx, CrayPat was not needed to obtain the bandwidth utilization. It is calculated directly based on problem size
+
+Run instructions:
+
+For SKL:
+aprun --p-state 2100000 -n24 -j1 ./isx.weak 33554432 output
+aprun --p-state 2100000 -n48 -j2 ./isx.weak 33554432 output
+
+For KNL (numactl was not needed in this case to allocate in MCDRAM, since cache mode ensures memory accesses in the critical routine are serviced by MCDRAM cache and not DDR. This was confirmed from the performance profile from CrayPat prior to actual runs. This also allowed to use a larger problem size also that would otherwise not fit in the 16GB of MCDRAM):
+aprun --p-state 1401000 -n64 -j1 ./isx.weak 25165824 output
+aprun --p-state 1401000 -n128 -j2 ./isx.weak 25165824 output
+aprun --p-state 1401000 -n256 -j4 ./isx.weak 25165824 output

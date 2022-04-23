@@ -1,0 +1,11 @@
+This repository contains the following:
+(1) original source code (and respective input files) for each of the 6 applications used in the experiments performed in the paper.
+(2) the optimized source code for the files that changed
+(3) Each sub-directory contains a README.SC.AD which describes the following:
+    a. The file that changed and what the change was (for example, whether it contains pragmas for vectorization, software prefetching, tiled code, etc.)
+    b. The Makefile that was used by the authors to build the application using the Cray compiler
+    c. The build instructions
+    d. The instructions used to generate instrumented binary
+    e. The instructions used to run the application binary on SKL and KNL
+    
+

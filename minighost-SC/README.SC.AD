@@ -1,0 +1,23 @@
+Our changes were made to MG_STENCIL_COMPS.F, and they are contained in the file MG_STENCIL_COMPS-tiled.F
+
+Build instructions:
+
+The Makefile that we used is copied in this directory - it invokes the Cray compiler and the relevant flags (no special flags were used)
+So, to build, just type: 
+'make' or 'make -j'
+
+The binary 'miniGhost.x' is generated in the same directory. To generate the instrumented executable to use with CrayPat, type:
+pat_build ./miniGhost.x
+
+This generates miniGhost.x+pat executable.
+
+Run instructions:
+
+For SKL:
+env OMP_NUM_THREADS=24 aprun -d24 -j1 -n1 --p-state=2100000 ./miniGhost.x+pat --scaling 1 --nx 504 --ny 126 --nz 768 --num_vars 40 --num_spikes 1 --debug_grid 1 --report_diffusion 21 --percent_sum 100 --num_tsteps 1 --stencil 24 --comm_method 10 --report_perf 1 --npx 1 --npy 1 --npz 1 --error_tol 8
+env OMP_NUM_THREADS=48 aprun -d48 -j2 -n1 --p-state=2100000 ./miniGhost.x+pat --scaling 1 --nx 504 --ny 126 --nz 768 --num_vars 40 --num_spikes 1 --debug_grid 1 --report_diffusion 21 --percent_sum 100 --num_tsteps 1 --stencil 24 --comm_method 10 --report_perf 1 --npx 1 --npy 1 --npz 1 --error_tol 8
+
+For KNL (numactl --membind=1 forces allocation in MCDRAM when flat mode enabled):
+env OMP_NUM_THREADS=64 aprun -d64 -j1 -n1 --p-state=1401000 numactl --membind=1 ./miniGhost.x+pat --scaling 1 --nx 504 --ny 126 --nz 768 --num_vars 40 --num_spikes 1 --debug_grid 1 --report_diffusion 21 --percent_sum 100 --num_tsteps 1 --stencil 24 --comm_method 10 --report_perf 1 --npx 1 --npy 1 --npz 1 --error_tol 8
+env OMP_NUM_THREADS=128 aprun -d128 -j2 -n1 --p-state=1401000 numactl --membind=1 ./miniGhost.x+pat --scaling 1 --nx 504 --ny 126 --nz 768 --num_vars 40 --num_spikes 1 --debug_grid 1 --report_diffusion 21 --percent_sum 100 --num_tsteps 1 --stencil 24 --comm_method 10 --report_perf 1 --npx 1 --npy 1 --npz 1 --error_tol 8
+env OMP_NUM_THREADS=256 aprun -d256 -j4 -n1 --p-state=1401000 numactl --membind=1 ./miniGhost.x+pat --scaling 1 --nx 504 --ny 126 --nz 768 --num_vars 40 --num_spikes 1 --debug_grid 1 --report_diffusion 21 --percent_sum 100 --num_tsteps 1 --stencil 24 --comm_method 10 --report_perf 1 --npx 1 --npy 1 --npz 1 --error_tol 8

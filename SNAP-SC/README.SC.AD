@@ -1,0 +1,24 @@
+Our changes were made to dim3_sweep.f90, and they are contained in the file dim3_sweep_swp.f90
+
+Build instructions:
+
+The Makefile that we used is copied in this directory - it invokes the Cray compiler and the relevant flags (no special flags were used)
+So, to build, just type: 
+'make' or 'make -j'
+
+The binary 'snap.x' is generated in the same directory. To generate the instrumented executable to use with CrayPat, type:
+pat_build ./snap.x
+
+This generates snap.x+pat executable.
+
+Run instructions:
+The parameter nthreads needs to be set in SNAP.input file depending on the run
+
+For SKL:
+env OMP_NUM_THREADS=24 aprun -d24 -j1 -n 1 --p-state=2100000 ./snap.x+pat SNAP.input SNAP.output
+env OMP_NUM_THREADS=48 aprun -d48 -j2 -n 1 --p-state=2100000 ./snap.x+pat SNAP.input SNAP.output
+
+For KNL (numactl --membind=1 forces allocation in MCDRAM when flat mode enabled):
+env OMP_NUM_THREADS=64 aprun -d 64 -n 1 --p-state=1401000 numactl --membind=1 ./snap.x+pat SNAP.input SNAP.output
+env OMP_NUM_THREADS=128 aprun -d128 -j2 -n 1 --p-state=1401000 numactl --membind=1 ./snap.x+pat SNAP.input SNAP.output
+env OMP_NUM_THREADS=256 aprun -d256 -j4 -n 1 --p-state=1401000 numactl --membind=1 ./snap.x+pat SNAP.input SNAP.output

@@ -7,5 +7,5 @@ This repository contains the following:
     c. The build instructions
     d. The instructions used to generate instrumented binary
     e. The instructions used to run the application binary on SKL and KNL
-    
-
+(4) Camera-ready version of our ISPASS'22 Paper titled 'Performance Analysis and Optimization with Little's Law'. PLEASE NOTE that this work was selected to be
+    a 'BEST PAPER NOMINEE' recently at ISPASS22. The work in this paper forms the basis of a good chunk of this tutorial.
